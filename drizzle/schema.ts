@@ -1,4 +1,5 @@
 // En tu schema.ts
+import { pgTable, uuid, text } from 'drizzle-orm/pg-core';
 export const clientes = pgTable('clientes', {
   id: uuid('id').primaryKey().defaultRandom(),
   nombre: text('nombre').notNull(),
