@@ -17,7 +17,7 @@
     "drizzle-orm": "latest",
     "postgres": "latest",
     "csv-parser": "^3.0.0",
-    "tsx": "^4.7.2"
+    "tsx": "^4.7.2",
     "@google/generative-ai": "^0.11.0"
   },
   "devDependencies": {
