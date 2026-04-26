@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function WizardContainer() {
   const [step, setStep] = useState(1);
@@ -8,7 +8,17 @@ export default function WizardContainer() {
 
   const [formData, setFormData] = useState({
     nombre: '', celular: '', email: '',
-    presupuestoDesde: '', presupuestoHasta: '', tipoVehiculo: 'indistinto', prioridad: 'precio', marcas: '', notas: '',
+    presupuestoMin: 10000, presupuestoMax: 50000,
+    atributos: [] as string[],
+    notasAdicionales: '',
+    filtros: {
+      todos: true,
+      soloChinos: false,
+      soloEV: false,
+      soloHEV: false,
+      soloJaponeses: false,
+      soloCoreanos: false
+    },
     vehiculos: [{ id: 1, patente: '', marca: '', modelo: '', anio: '', km: '', estado: 'bueno' }]
   });
 
@@ -16,99 +26,146 @@ export default function WizardContainer() {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleVehicleChange = (id: number, field: string, value: string) => {
+  // Lógica de Atributos (Checkboxes)
+  const toggleAtributo = (at: string) => {
     setFormData(prev => ({
       ...prev,
-      vehiculos: prev.vehiculos.map(v => v.id === id ? { ...v, [field]: value } : v)
+      atributos: prev.atributos.includes(at) 
+        ? prev.atributos.filter(a => a !== at) 
+        : [...prev.atributos, at]
     }));
   };
 
-  const addVehicle = () => {
-    if (formData.vehiculos.length < 5) {
-      setFormData(prev => ({
-        ...prev,
-        vehiculos: [...prev.vehiculos, { id: Date.now(), patente: '', marca: '', modelo: '', anio: '', km: '', estado: 'bueno' }]
-      }));
-    }
+  // Lógica de Filtros ON/OFF con exclusión mutua (UX)
+  const handleFilterToggle = (filterKey: keyof typeof formData.filtros) => {
+    setFormData(prev => {
+      const newFiltros = { ...prev.filtros };
+
+      if (filterKey === 'todos') {
+        return { ...prev, filtros: { todos: true, soloChinos: false, soloEV: false, soloHEV: false, soloJaponeses: false, soloCoreanos: false }};
+      }
+
+      newFiltros[filterKey] = !newFiltros[filterKey];
+      newFiltros.todos = false;
+
+      // Exclusión: No puede ser EV y HEV al mismo tiempo
+      if (filterKey === 'soloEV' && newFiltros.soloEV) newFiltros.soloHEV = false;
+      if (filterKey === 'soloHEV' && newFiltros.soloHEV) newFiltros.soloEV = false;
+
+      // Exclusión de origen: Solo un origen a la vez
+      if (['soloChinos', 'soloJaponeses', 'soloCoreanos'].includes(filterKey) && newFiltros[filterKey]) {
+        if (filterKey !== 'soloChinos') newFiltros.soloChinos = false;
+        if (filterKey !== 'soloJaponeses') newFiltros.soloJaponeses = false;
+        if (filterKey !== 'soloCoreanos') newFiltros.soloCoreanos = false;
+      }
+
+      // Si todos los específicos están OFF, volver a "Incluir todos"
+      const anyActive = Object.entries(newFiltros).some(([k, v]) => k !== 'todos' && v);
+      if (!anyActive) newFiltros.todos = true;
+
+      return { ...prev, filtros: newFiltros };
+    });
   };
 
   const isStep1Valid = formData.nombre.trim() !== '' && formData.celular.trim() !== '';
 
   return (
-    <div className="max-w-4xl mx-auto p-8 bg-white border border-data-charcoal/20">
+    <div className="max-w-4xl mx-auto p-8 bg-white border border-[#3A3A3C]/20 shadow-none">
       
-      {/* BRANDING: Wordmark Dual */}
-      <div className="text-center mb-10 mt-4">
-        <h1 className="text-5xl uppercase tracking-[1px] mb-3">
-          <span className="font-montserrat font-black text-authority-blue">DATA</span>
-          <span className="font-montserrat font-light text-data-charcoal">CAR</span>
+      {/* BRANDING CORPORATIVO [cite: 5, 11, 15] */}
+      <div className="text-center mb-10">
+        <h1 className="text-5xl tracking-[1px] mb-2 select-none">
+          <span className="font-montserrat font-[900] text-[#0A1F33]">DATA</span>
+          <span className="font-montserrat font-[300] text-[#3A3A3C] tracking-wider">CAR</span>
         </h1>
-        <p className="text-data-charcoal/70 font-medium">Gestión analítica de su próxima inversión automotriz</p>
+        <p className="font-inter font-medium text-[#3A3A3C]/60 text-sm uppercase tracking-widest">Gestión de Inversiones Automotrices</p>
       </div>
 
-      {/* Barra de progreso con Digital Cyan */}
-      <div className="mb-10 bg-slate-200 h-1">
-        <div className="bg-digital-cyan h-1 transition-all duration-500" style={{ width: `${(step / totalSteps) * 100}%` }}></div>
+      {/* Barra de progreso Digital Cyan [cite: 42] */}
+      <div className="mb-10 bg-slate-100 h-1">
+        <div className="bg-[#00BFFF] h-1 transition-all duration-500" style={{ width: `${(step / totalSteps) * 100}%` }}></div>
       </div>
 
-      {/* PASO 1 */}
       {step === 1 && (
-        <div className="space-y-6 animate-in fade-in">
-          <h2 className="text-xl font-bold text-authority-blue border-b border-data-charcoal/20 pb-3 uppercase tracking-wider text-sm">1. Datos Personales y Preferencias</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <input name="nombre" value={formData.nombre} onChange={handleInputChange} placeholder="Nombre y Apellido *" className="p-3 border border-data-charcoal/30 outline-none focus:border-authority-blue bg-slate-50" />
-            <input name="celular" value={formData.celular} onChange={handleInputChange} placeholder="Celular *" className="p-3 border border-data-charcoal/30 outline-none focus:border-authority-blue bg-slate-50" />
-            <input name="presupuestoDesde" type="number" value={formData.presupuestoDesde} onChange={handleInputChange} placeholder="Presupuesto Desde ($)" className="p-3 border border-data-charcoal/30 outline-none focus:border-authority-blue bg-slate-50" />
-            <select name="tipoVehiculo" value={formData.tipoVehiculo} onChange={handleInputChange} className="p-3 border border-data-charcoal/30 outline-none focus:border-authority-blue bg-slate-50 text-data-charcoal">
-              <option value="indistinto">Tipo: Indistinto</option>
-              <option value="SUV">SUV</option>
-              <option value="sedan">Sedán</option>
-              <option value="pickup">Pick-up</option>
-            </select>
-          </div>
-        </div>
-      )}
-
-      {/* PASO 2 */}
-      {step === 2 && (
-        <div className="space-y-6 animate-in fade-in">
-          <div className="flex justify-between items-center border-b border-data-charcoal/20 pb-3">
-            <h2 className="text-xl font-bold text-authority-blue uppercase tracking-wider text-sm">2. Vehículos a Evaluar ({formData.vehiculos.length}/5)</h2>
-            {formData.vehiculos.length < 5 && (
-              <button onClick={addVehicle} className="text-xs bg-data-charcoal text-white px-4 py-2 uppercase tracking-wider font-bold hover:bg-authority-blue transition-colors">
-                + Añadir Auto
-              </button>
-            )}
-          </div>
-          {formData.vehiculos.map((v, i) => (
-            <div key={v.id} className="p-5 bg-slate-50 border border-data-charcoal/20 grid grid-cols-2 md:grid-cols-4 gap-4">
-              <input placeholder="Patente" value={v.patente} onChange={e => handleVehicleChange(v.id, 'patente', e.target.value)} className="p-2 border border-data-charcoal/30 outline-none uppercase text-sm focus:border-authority-blue bg-white" />
-              <input placeholder="Marca *" value={v.marca} onChange={e => handleVehicleChange(v.id, 'marca', e.target.value)} className="p-2 border border-data-charcoal/30 outline-none text-sm focus:border-authority-blue bg-white" />
-              <input placeholder="Modelo *" value={v.modelo} onChange={e => handleVehicleChange(v.id, 'modelo', e.target.value)} className="p-2 border border-data-charcoal/30 outline-none text-sm focus:border-authority-blue bg-white" />
-              <input placeholder="Año" type="number" value={v.anio} onChange={e => handleVehicleChange(v.id, 'anio', e.target.value)} className="p-2 border border-data-charcoal/30 outline-none text-sm focus:border-authority-blue bg-white" />
+        <div className="space-y-8 animate-in fade-in">
+          {/* SECCIÓN 1: LEAD */}
+          <section>
+            <h2 className="font-montserrat font-[900] text-[#0A1F33] text-xs uppercase tracking-widest mb-4 border-b border-slate-100 pb-2">1. Información de Contacto</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input name="nombre" value={formData.nombre} onChange={handleInputChange} placeholder="Nombre y Apellido *" className="p-3 border border-[#3A3A3C]/20 outline-none focus:border-[#0A1F33] font-inter text-sm" />
+              <input name="celular" value={formData.celular} onChange={handleInputChange} placeholder="Celular *" className="p-3 border border-[#3A3A3C]/20 outline-none focus:border-[#0A1F33] font-inter text-sm" />
             </div>
-          ))}
+          </section>
+
+          {/* SECCIÓN 2: RANGO PRESUPUESTARIO */}
+          <section>
+            <h2 className="font-montserrat font-[900] text-[#0A1F33] text-xs uppercase tracking-widest mb-4 border-b border-slate-100 pb-2">2. Rango de Inversión (USD)</h2>
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <input type="range" min="5000" max="150000" step="1000" value={formData.presupuestoMax} name="presupuestoMax" onChange={handleInputChange} className="w-full h-1 bg-slate-200 appearance-none cursor-pointer accent-[#00BFFF]" />
+                <div className="flex justify-between text-[10px] font-bold text-[#3A3A3C]/50 mt-2">
+                  <span>MIN: $5.000</span>
+                  <span>MÁX: $150.000</span>
+                </div>
+              </div>
+              <div className="bg-[#0A1F33] text-white p-3 font-montserrat font-[900] text-sm min-w-[120px] text-center">
+                UP TO ${Number(formData.presupuestoMax).toLocaleString()}
+              </div>
+            </div>
+          </section>
+
+          {/* SECCIÓN 3: ATRIBUTOS Y FILTROS */}
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+              <h2 className="font-montserrat font-[900] text-[#0A1F33] text-xs uppercase tracking-widest mb-4">Atributos Prioritarios</h2>
+              <div className="flex flex-wrap gap-2">
+                {['Seguridad', 'Dimensiones', 'Rendimiento', 'Precio', 'Tecnología'].map(at => (
+                  <button key={at} onClick={() => toggleAtributo(at)} className={`px-4 py-2 text-[10px] font-bold uppercase tracking-wider border transition-all ${formData.atributos.includes(at) ? 'bg-[#0A1F33] text-white border-[#0A1F33]' : 'bg-transparent text-[#3A3A3C] border-[#3A3A3C]/20'}`}>
+                    {at}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <h2 className="font-montserrat font-[900] text-[#0A1F33] text-xs uppercase tracking-widest mb-4">Filtros de Exclusión</h2>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: 'Incluir Todos', key: 'todos' },
+                  { label: 'Solo Chinos', key: 'soloChinos' },
+                  { label: 'Solo EV', key: 'soloEV' },
+                  { label: 'Solo HEV', key: 'soloHEV' },
+                  { label: 'Japonesas', key: 'soloJaponeses' },
+                  { label: 'Coreanas', key: 'soloCoreanos' }
+                ].map(f => (
+                  <button key={f.key} onClick={() => handleFilterToggle(f.key as any)} className={`flex justify-between items-center px-3 py-2 border text-[9px] font-black uppercase tracking-tighter transition-all ${formData.filtros[f.key as keyof typeof formData.filtros] ? 'border-[#00BFFF] text-[#00BFFF] bg-[#00BFFF]/5' : 'border-slate-100 text-slate-400'}`}>
+                    {f.label}
+                    <div className={`w-2 h-2 rounded-full ${formData.filtros[f.key as keyof typeof formData.filtros] ? 'bg-[#00BFFF]' : 'bg-slate-200'}`}></div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* SECCIÓN 4: NOTAS */}
+          <section>
+            <h2 className="font-montserrat font-[900] text-[#0A1F33] text-xs uppercase tracking-widest mb-4">Notas Adicionales</h2>
+            <textarea name="notasAdicionales" value={formData.notasAdicionales} onChange={handleInputChange} placeholder="Colores favoritos, detalles específicos, requerimientos técnicos..." className="w-full p-4 border border-[#3A3A3C]/20 outline-none focus:border-[#0A1F33] font-inter text-sm min-h-[100px] bg-slate-50" />
+          </section>
         </div>
       )}
 
-      {/* PASO 3 */}
-      {step === 3 && (
-        <div className="py-16 text-center border border-data-charcoal/10 bg-slate-50">
-          <div className="w-12 h-12 border-4 border-digital-cyan border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-          <h2 className="text-lg font-bold text-authority-blue uppercase tracking-widest">Análisis en Proceso</h2>
-          <p className="text-data-charcoal mt-2 text-sm">El motor de IA está procesando los datos...</p>
-        </div>
-      )}
-
-      {/* NAVEGACIÓN CON DIGITAL CYAN PARA CTA */}
-      <div className="mt-10 flex justify-between pt-6 border-t border-data-charcoal/20">
-        <button disabled={step === 1} onClick={() => setStep(step - 1)} className="px-6 py-3 text-data-charcoal uppercase tracking-wider text-sm font-bold disabled:opacity-0 transition-all">Atrás</button>
+      {/* NAVEGACIÓN [cite: 44] */}
+      <div className="mt-12 flex justify-between items-center pt-8 border-t border-slate-100">
+        <button disabled={step === 1} onClick={() => setStep(step - 1)} className="font-montserrat font-[900] text-[10px] uppercase tracking-[2px] text-[#3A3A3C]/40 disabled:opacity-0">
+          ← Back
+        </button>
         <button 
           disabled={(step === 1 && !isStep1Valid)}
           onClick={() => setStep(step + 1)} 
-          className="px-8 py-3 bg-digital-cyan text-authority-blue uppercase tracking-wider text-sm font-extrabold disabled:bg-slate-200 disabled:text-slate-400 transition-colors"
+          className="bg-[#00BFFF] text-[#0A1F33] px-10 py-4 font-montserrat font-[900] text-xs uppercase tracking-[2px] hover:bg-[#0099CC] transition-all disabled:bg-slate-100 disabled:text-slate-300"
         >
-          {step === 3 ? 'Generar Dossier' : 'Siguiente'}
+          {step === 3 ? 'Generate Dossier' : 'Continue →'}
         </button>
       </div>
     </div>
