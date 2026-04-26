@@ -4,18 +4,19 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run seed && next build",
     "start": "next start",
     "lint": "next lint",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "next": "14.2.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "drizzle-orm": "latest",
-    "postgres": "latest"
-     "csv-parser": "^3.0.0",
+    "postgres": "latest",
+    "csv-parser": "^3.0.0",
     "tsx": "^4.7.2"
   },
   "devDependencies": {
@@ -27,14 +28,5 @@
     "tailwindcss": "^3.4.3",
     "typescript": "^5.4.5",
     "drizzle-kit": "latest"
-   
-  },
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "db:push": "drizzle-kit push",
-    "seed": "tsx scripts/seed.ts"
-  },
+  }
 }
