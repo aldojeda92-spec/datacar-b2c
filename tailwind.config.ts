@@ -7,7 +7,18 @@ const config: Config = {
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        'authority-blue': '#0A1F33',
+        'data-charcoal': '#3A3A3C',
+        'digital-cyan': '#00BFFF',
+        'silver-light': '#C0C0C0',
+      },
+      fontFamily: {
+        montserrat: ['var(--font-montserrat)', 'sans-serif'],
+        inter: ['var(--font-inter)', 'sans-serif'],
+      }
+    },
   },
   plugins: [],
 }
