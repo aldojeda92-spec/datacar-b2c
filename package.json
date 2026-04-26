@@ -27,5 +27,13 @@
     "drizzle-kit": "latest"
     "csv-parser": "^3.0.0",
     "tsx": "^4.7.2"
-  }
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:push": "drizzle-kit push",
+    "seed": "tsx scripts/seed.ts"
+  },
 }
