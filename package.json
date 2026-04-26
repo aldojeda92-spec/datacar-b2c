@@ -1,40 +1,25 @@
 {
-  "name": "datacar",
+  "name": "datacar-b2c",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
-  },"dependencies": {
-  "next": "latest",
-  "react": "latest",
-  "react-dom": "latest",
-  "@anthropic-ai/sdk": "^0.90.0",
-  "@supabase/supabase-js": "^2.103.3",
-  "drizzle-orm": "^0.38.0",
-  "postgres": "^3.4.9",
-  "zod": "^3.23.0",
-  "lucide-react": "^0.468.0",
-  "html2canvas": "^1.4.1",
-  "jspdf": "^2.5.1",
-  "clsx": "^2.1.1",
-  "tailwind-merge": "^2.5.0"
-},
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/bcryptjs": "^3.0.0",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "drizzle-kit": "^0.31.10",
-    "tailwindcss": "^4",
-    "typescript": "^5",
-    "vitest": "^4.1.4"
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "autoprefixer": "latest",
+    "postcss": "latest",
+    "tailwindcss": "latest",
+    "typescript": "latest"
   }
 }
