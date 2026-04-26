@@ -26,43 +26,54 @@ export default function WizardContainer() {
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // Lógica de presupuesto para que el Min no pase al Max
+  const handleRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    const val = Number(value);
+    
+    setFormData(prev => {
+      if (name === 'presupuestoMin' && val > prev.presupuestoMax - 5000) return prev;
+      if (name === 'presupuestoMax' && val < prev.presupuestoMin + 5000) return prev;
+      return { ...prev, [name]: val };
+    });
+  };
+
+  // Lógica de Atributos: Límite de 3
   const toggleAtributo = (at: string) => {
-    setFormData(prev => ({
-      ...prev,
-      atributos: prev.atributos.includes(at) 
-        ? prev.atributos.filter(a => a !== at) 
-        : [...prev.atributos, at]
-    }));
+    setFormData(prev => {
+      const exists = prev.atributos.includes(at);
+      if (!exists && prev.atributos.length >= 3) return prev; // Bloqueo en 3
+      
+      return {
+        ...prev,
+        atributos: exists 
+          ? prev.atributos.filter(a => a !== at) 
+          : [...prev.atributos, at]
+      };
+    });
   };
 
   const handleFilterToggle = (filterKey: keyof typeof formData.filtros) => {
     setFormData(prev => {
       const newFiltros = { ...prev.filtros };
-
       if (filterKey === 'todos') {
         return { ...prev, filtros: { todos: true, soloChinos: false, soloEV: false, soloHEV: false, soloJaponeses: false, soloCoreanos: false }};
       }
-
       newFiltros[filterKey] = !newFiltros[filterKey];
       newFiltros.todos = false;
-
-      // Exclusión lógica: No puede ser EV y HEV simultáneamente
       if (filterKey === 'soloEV' && newFiltros.soloEV) newFiltros.soloHEV = false;
       if (filterKey === 'soloHEV' && newFiltros.soloHEV) newFiltros.soloEV = false;
-
-      // Exclusión de origen: Solo un bloque regional activo
       if (['soloChinos', 'soloJaponeses', 'soloCoreanos'].includes(filterKey) && newFiltros[filterKey]) {
         if (filterKey !== 'soloChinos') newFiltros.soloChinos = false;
         if (filterKey !== 'soloJaponeses') newFiltros.soloJaponeses = false;
         if (filterKey !== 'soloCoreanos') newFiltros.soloCoreanos = false;
       }
-
       const anyActive = Object.entries(newFiltros).some(([k, v]) => k !== 'todos' && v);
       if (!anyActive) newFiltros.todos = true;
-
       return { ...prev, filtros: newFiltros };
     });
   };
@@ -88,16 +99,16 @@ export default function WizardContainer() {
   return (
     <div className="max-w-4xl mx-auto p-8 bg-white border border-[#3A3A3C]/20">
       
-      {/* WORDMARK DUAL (Manual v2.1) */}
+      {/* WORDMARK DUAL */}
       <div className="text-center mb-10">
-        <h1 className="text-5xl uppercase tracking-[1px] mb-2 select-none">
+        <h1 className="text-5xl uppercase tracking-[1px] mb-2">
           <span className="font-montserrat font-[900] text-[#0A1F33]">DATA</span>
           <span className="font-montserrat font-[300] text-[#3A3A3C]">CAR</span>
         </h1>
-        <p className="font-inter font-medium text-[#3A3A3C]/60 text-[10px] uppercase tracking-[3px]">Inversión Automotriz Basada en Datos</p>
+        <p className="font-inter font-medium text-[#3A3A3C]/60 text-[10px] uppercase tracking-[3px]">Gestión Analítica de Inversiones</p>
       </div>
 
-      {/* Barra de progreso Digital Cyan */}
+      {/* Barra de progreso */}
       <div className="mb-12 bg-slate-100 h-[2px]">
         <div className="bg-[#00BFFF] h-[2px] transition-all duration-700" style={{ width: `${(step / totalSteps) * 100}%` }}></div>
       </div>
@@ -105,7 +116,6 @@ export default function WizardContainer() {
       {step === 1 && (
         <div className="space-y-10 animate-in fade-in duration-500">
           
-          {/* 1. CONTACTO */}
           <section>
             <h2 className="font-montserrat font-[900] text-[#0A1F33] text-[11px] uppercase tracking-widest mb-5 border-l-4 border-[#00BFFF] pl-3">1. Perfil del Inversor</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -114,37 +124,47 @@ export default function WizardContainer() {
             </div>
           </section>
 
-          {/* 2. MARGEN DE INVERSIÓN DUAL */}
+          {/* SECCIÓN 2: RANGO DE INVERSIÓN DUAL CON BARRAS (UX) */}
           <section>
-            <h2 className="font-montserrat font-[900] text-[#0A1F33] text-[11px] uppercase tracking-widest mb-5 border-l-4 border-[#00BFFF] pl-3">2. Margen de Inversión (USD)</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
-              <div>
-                <label className="block text-[10px] font-bold text-[#3A3A3C]/60 uppercase mb-2">Mínimo sugerido</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#3A3A3C]/40 text-sm font-bold">$</span>
-                  <input type="number" name="presupuestoMin" value={formData.presupuestoMin} onChange={handleInputChange} className="w-full p-4 pl-8 border border-[#3A3A3C]/20 outline-none focus:border-[#0A1F33] font-inter text-sm font-bold text-[#0A1F33]" />
-                </div>
+            <div className="flex justify-between items-end mb-5">
+              <h2 className="font-montserrat font-[900] text-[#0A1F33] text-[11px] uppercase tracking-widest border-l-4 border-[#00BFFF] pl-3">2. Margen de Inversión (USD)</h2>
+              <div className="font-montserrat font-[900] text-sm text-[#0A1F33]">
+                ${formData.presupuestoMin.toLocaleString()} — ${formData.presupuestoMax.toLocaleString()}
               </div>
-              <div>
-                <label className="block text-[10px] font-bold text-[#3A3A3C]/60 uppercase mb-2">Máximo disponible</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#3A3A3C]/40 text-sm font-bold">$</span>
-                  <input type="number" name="presupuestoMax" value={formData.presupuestoMax} onChange={handleInputChange} className="w-full p-4 pl-8 border border-[#3A3A3C]/20 outline-none focus:border-[#0A1F33] font-inter text-sm font-bold text-[#0A1F33]" />
-                </div>
+            </div>
+            <div className="space-y-6 px-2">
+              <div className="space-y-2">
+                <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase"><span>Desde</span><span>${formData.presupuestoMin.toLocaleString()}</span></div>
+                <input type="range" name="presupuestoMin" min="5000" max="150000" step="1000" value={formData.presupuestoMin} onChange={handleRangeChange} className="w-full h-1 bg-slate-100 appearance-none cursor-pointer accent-[#0A1F33]" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase"><span>Hasta</span><span>${formData.presupuestoMax.toLocaleString()}</span></div>
+                <input type="range" name="presupuestoMax" min="5000" max="150000" step="1000" value={formData.presupuestoMax} onChange={handleRangeChange} className="w-full h-1 bg-slate-100 appearance-none cursor-pointer accent-[#00BFFF]" />
               </div>
             </div>
           </section>
 
-          {/* 3. PREFERENCIAS Y FILTROS */}
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-10">
             <div>
-              <h2 className="font-montserrat font-[900] text-[#0A1F33] text-[11px] uppercase tracking-widest mb-5 border-l-4 border-[#00BFFF] pl-3">3. Atributos Críticos</h2>
+              <div className="flex justify-between items-center mb-5">
+                <h2 className="font-montserrat font-[900] text-[#0A1F33] text-[11px] uppercase tracking-widest border-l-4 border-[#00BFFF] pl-3">3. Atributos Críticos</h2>
+                <span className="text-[9px] font-black text-[#00BFFF]">{formData.atributos.length}/3</span>
+              </div>
               <div className="flex flex-wrap gap-2">
-                {['Seguridad', 'Dimensiones', 'Rendimiento', 'Precio', 'Tecnología'].map(at => (
-                  <button key={at} onClick={() => toggleAtributo(at)} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest border transition-all ${formData.atributos.includes(at) ? 'bg-[#0A1F33] text-white border-[#0A1F33]' : 'bg-transparent text-[#3A3A3C] border-[#3A3A3C]/20 hover:border-[#0A1F33]'}`}>
-                    {at}
-                  </button>
-                ))}
+                {['Seguridad', 'Dimensiones', 'Rendimiento', 'Precio', 'Tecnología'].map(at => {
+                  const selected = formData.atributos.includes(at);
+                  const disabled = !selected && formData.atributos.length >= 3;
+                  return (
+                    <button 
+                      key={at} 
+                      onClick={() => toggleAtributo(at)} 
+                      disabled={disabled}
+                      className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest border transition-all ${selected ? 'bg-[#0A1F33] text-white border-[#0A1F33]' : 'bg-transparent text-[#3A3A3C] border-[#3A3A3C]/20'} ${disabled ? 'opacity-20 cursor-not-allowed' : 'hover:border-[#0A1F33]'}`}
+                    >
+                      {at}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             
@@ -168,7 +188,6 @@ export default function WizardContainer() {
             </div>
           </section>
 
-          {/* 4. NOTAS ADICIONALES */}
           <section>
             <h2 className="font-montserrat font-[900] text-[#0A1F33] text-[11px] uppercase tracking-widest mb-4">Notas y Requerimientos Específicos</h2>
             <textarea name="notasAdicionales" value={formData.notasAdicionales} onChange={handleInputChange} placeholder="Colores, equipamiento deseado, restricciones de espacio..." className="w-full p-4 border border-[#3A3A3C]/20 outline-none focus:border-[#0A1F33] font-inter text-sm min-h-[80px] bg-slate-50/30" />
@@ -176,7 +195,7 @@ export default function WizardContainer() {
         </div>
       )}
 
-      {/* PASO 2: VEHÍCULOS (GARAJE) */}
+      {/* PASO 2: VEHÍCULOS */}
       {step === 2 && (
         <div className="space-y-6 animate-in fade-in duration-500">
           <div className="flex justify-between items-end border-b border-slate-100 pb-4">
@@ -186,35 +205,21 @@ export default function WizardContainer() {
             )}
           </div>
           <div className="grid grid-cols-1 gap-4">
-            {formData.vehiculos.map((v, i) => (
-              <div key={v.id} className="p-6 bg-slate-50 border border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4 relative">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Patente</label>
-                  <input value={v.patente} onChange={e => handleVehicleChange(v.id, 'patente', e.target.value)} className="w-full p-2 border border-slate-200 outline-none uppercase text-xs font-bold focus:border-[#0A1F33]" placeholder="ABC 123" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Marca *</label>
-                  <input value={v.marca} onChange={e => handleVehicleChange(v.id, 'marca', e.target.value)} className="w-full p-2 border border-slate-200 outline-none text-xs focus:border-[#0A1F33]" placeholder="Toyota" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Modelo *</label>
-                  <input value={v.modelo} onChange={e => handleVehicleChange(v.id, 'modelo', e.target.value)} className="w-full p-2 border border-slate-200 outline-none text-xs focus:border-[#0A1F33]" placeholder="Hilux" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Año</label>
-                  <input type="number" value={v.anio} onChange={e => handleVehicleChange(v.id, 'anio', e.target.value)} className="w-full p-2 border border-slate-200 outline-none text-xs focus:border-[#0A1F33]" placeholder="2024" />
-                </div>
+            {formData.vehiculos.map((v) => (
+              <div key={v.id} className="p-6 bg-slate-50 border border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-1"><label className="text-[9px] font-bold text-slate-400 uppercase">Patente</label><input value={v.patente} onChange={e => handleVehicleChange(v.id, 'patente', e.target.value)} className="w-full p-2 border border-slate-200 outline-none uppercase text-xs font-bold focus:border-[#0A1F33]" placeholder="ABC 123" /></div>
+                <div className="space-y-1"><label className="text-[9px] font-bold text-slate-400 uppercase">Marca *</label><input value={v.marca} onChange={e => handleVehicleChange(v.id, 'marca', e.target.value)} className="w-full p-2 border border-slate-200 outline-none text-xs focus:border-[#0A1F33]" placeholder="Toyota" /></div>
+                <div className="space-y-1"><label className="text-[9px] font-bold text-slate-400 uppercase">Modelo *</label><input value={v.modelo} onChange={e => handleVehicleChange(v.id, 'modelo', e.target.value)} className="w-full p-2 border border-slate-200 outline-none text-xs focus:border-[#0A1F33]" placeholder="Hilux" /></div>
+                <div className="space-y-1"><label className="text-[9px] font-bold text-slate-400 uppercase">Año</label><input type="number" value={v.anio} onChange={e => handleVehicleChange(v.id, 'anio', e.target.value)} className="w-full p-2 border border-slate-200 outline-none text-xs focus:border-[#0A1F33]" placeholder="2024" /></div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* NAVEGACIÓN CORPORATIVA */}
+      {/* NAVEGACIÓN */}
       <div className="mt-16 flex justify-between items-center pt-8 border-t border-slate-100">
-        <button disabled={step === 1} onClick={() => setStep(step - 1)} className="font-montserrat font-[900] text-[10px] uppercase tracking-[3px] text-[#3A3A3C]/30 hover:text-[#0A1F33] transition-all disabled:opacity-0">
-          ← Back
-        </button>
+        <button disabled={step === 1} onClick={() => setStep(step - 1)} className="font-montserrat font-[900] text-[10px] uppercase tracking-[3px] text-[#3A3A3C]/30 hover:text-[#0A1F33] transition-all disabled:opacity-0">← Back</button>
         <button 
           disabled={(step === 1 && !isStep1Valid)}
           onClick={() => setStep(step + 1)} 
