@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     if (candidatos.length === 0) return NextResponse.json({ success: false, error: "Sin resultados técnicos." }, { status: 400 });
 
     // 2. SELECCIÓN IA (FLASH PARA VELOCIDAD)
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", generationConfig: { responseMimeType: "application/json" } });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview", generationConfig: { responseMimeType: "application/json" } });
     const payload = candidatos.map(c => ({ id: c.id, m: c.marca, mod: c.modelo, p: c.precioUsd }));
     
     const systemPrompt = `Analyze cars and select TOP 10 UNIQUE models.
