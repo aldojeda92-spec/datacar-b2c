@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // 1. FILTRO SQL DETERMINISTA
+    // 1. FILTRO DURO SQL
     const sqlFilters = [
       gte(catalogoMatriz.precioUsd, leadData.presupuestoMin - 2000),
       lte(catalogoMatriz.precioUsd, leadData.presupuestoMax + 2000)
@@ -49,13 +49,13 @@ export async function POST(req: Request) {
 
     const candidatos = await db.query.catalogoMatriz.findMany({ 
       where: and(...sqlFilters), 
-      limit: 80 
+      limit: 100 
     });
 
-    if (candidatos.length === 0) return NextResponse.json({ success: false, error: "No hay resultados para estos filtros." }, { status: 400 });
+    if (candidatos.length === 0) return NextResponse.json({ success: false, error: "Sin resultados técnicos." }, { status: 400 });
 
-    // 2. IA SELECCIÓN (Gemini 1.5 Flash para velocidad)
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview", generationConfig: { responseMimeType: "application/json" } });
+    // 2. SELECCIÓN IA (FLASH PARA VELOCIDAD)
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", generationConfig: { responseMimeType: "application/json" } });
     const payload = candidatos.map(c => ({ id: c.id, m: c.marca, mod: c.modelo, p: c.precioUsd }));
     
     const systemPrompt = `Analyze cars and select TOP 10 UNIQUE models.
@@ -69,7 +69,6 @@ export async function POST(req: Request) {
     const selectedIds = resultadoIA.ranking.map((r: any) => r.id);
     const selectedAutos = candidatos.filter(c => selectedIds.includes(c.id));
     const modelNames = Array.from(new Set(selectedAutos.map(a => a.modelo)));
-    
     const todasLasVersiones = await db.query.catalogoMatriz.findMany({
       where: inArray(catalogoMatriz.modelo, modelNames)
     });
