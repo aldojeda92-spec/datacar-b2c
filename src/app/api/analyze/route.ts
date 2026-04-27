@@ -7,6 +7,15 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 export const maxDuration = 60; 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '');
 
+// Definimos la forma de los filtros para que TypeScript no se queje
+interface FiltrosEstrategicos {
+  soloChinos?: boolean;
+  soloJaponeses?: boolean;
+  soloCoreanos?: boolean;
+  soloEV?: boolean;
+  soloHEV?: boolean;
+}
+
 export async function POST(req: Request) {
   try {
     const { leadId } = await req.json();
@@ -23,24 +32,22 @@ export async function POST(req: Request) {
       lte(catalogoMatriz.precioUsd, leadData.presupuestoMax + 2000)
     ];
 
-    // Filtro por Tipo de Carrocería blindado para Drizzle ORM
+    // 1. Filtro por Tipo de Carrocería
     const tiposGuardados = leadData.tipos as string[]; 
     if (tiposGuardados && Array.isArray(tiposGuardados) && tiposGuardados.length > 0) {
-      // Usamos tipoCarroceria (Cámbialo a tipo_carroceria si tu schema usa guiones bajos en el nombre de la variable)
       const condition = or(...tiposGuardados.map((t: string) => ilike(catalogoMatriz.tipoCarroceria, `%${t}%`)));
-      if (condition) {
-        sqlFilters.push(condition);
-      }
+      if (condition) sqlFilters.push(condition);
     }
 
-    // Filtros de Origen
-    if (leadData.filtros.soloChinos) sqlFilters.push(ilike(catalogoMatriz.origen, '%China%'));
-    if (leadData.filtros.soloJaponeses) sqlFilters.push(ilike(catalogoMatriz.origen, '%Japón%'));
-    if (leadData.filtros.soloCoreanos) sqlFilters.push(ilike(catalogoMatriz.origen, '%Corea%'));
-
-    // Filtros de Motor
-    if (leadData.filtros.soloEV) sqlFilters.push(ilike(catalogoMatriz.motor, '%Eléctrico%'));
-    if (leadData.filtros.soloHEV) sqlFilters.push(ilike(catalogoMatriz.motor, '%Híbrido%'));
+    // 2. Filtros de Origen y Motor (Casting de filtros)
+    const filtros = leadData.filtros as FiltrosEstrategicos;
+    if (filtros) {
+      if (filtros.soloChinos) sqlFilters.push(ilike(catalogoMatriz.origen, '%China%'));
+      if (filtros.soloJaponeses) sqlFilters.push(ilike(catalogoMatriz.origen, '%Japón%'));
+      if (filtros.soloCoreanos) sqlFilters.push(ilike(catalogoMatriz.origen, '%Corea%'));
+      if (filtros.soloEV) sqlFilters.push(ilike(catalogoMatriz.motor, '%Eléctrico%'));
+      if (filtros.soloHEV) sqlFilters.push(ilike(catalogoMatriz.motor, '%Híbrido%'));
+    }
 
     // Ejecutamos la búsqueda purgada
     const candidatosCompletos = await db.query.catalogoMatriz.findMany({
