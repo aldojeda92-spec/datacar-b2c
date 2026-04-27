@@ -2,14 +2,15 @@ import { pgTable, uuid, text, integer, jsonb, timestamp } from 'drizzle-orm/pg-c
 
 // Tabla de Leads (Inversores)
 export const leads = pgTable('leads', {
-  id: uuid('id').primaryKey().defaultRandom(),
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   nombre: text('nombre').notNull(),
   celular: text('celular').notNull(),
-  email: text('email'), // <-- ESTA ES LA PIEZA QUE FALTABA
+  email: text('email'),
   presupuestoMin: integer('presupuesto_min').notNull(),
   presupuestoMax: integer('presupuesto_max').notNull(),
-  atributos: jsonb('atributos').notNull(),
-  filtros: jsonb('filtros').notNull(),
+  atributos: jsonb('atributos'), 
+  tipos: jsonb('tipos'), // <--- SOLO AGREGA ESTA LÍNEA
+  filtros: jsonb('filtros'),
   notas: text('notas'),
   createdAt: timestamp('created_at').defaultNow(),
 });
