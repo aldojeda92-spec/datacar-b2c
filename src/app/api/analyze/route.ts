@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     
     // CAMBIO CLAVE: Usamos gemini-1.5-flash para velocidad de producción
     const model = genAI.getGenerativeModel({ 
-        model: "gemini-3-flash-preview", 
+        model: "gemini-flash-latest", 
         generationConfig: { 
             responseMimeType: "application/json",
             temperature: 0.1 // Menos creatividad = más velocidad y precisión
