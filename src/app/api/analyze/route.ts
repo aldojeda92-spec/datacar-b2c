@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
     // CONFIGURAR GEMINI FLASH PARA DATOS ESTRUCTURADOS
     const model = genAI.getGenerativeModel({ 
-        model: "gemini-3.1-pro-preview", 
+        model: "gemini-3-flash-preview", 
         generationConfig: { responseMimeType: "application/json" }
     });
 
