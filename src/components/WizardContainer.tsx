@@ -5,10 +5,10 @@ import { saveLeadAction } from '@/app/actions';
 
 export default function WizardContainer() {
   const [step, setStep] = useState(1);
-  const [isSaving, setIsSaving] = useState(false);
-  const totalSteps = 3;
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [top10, setTop10] = useState<any[]>([]);
 
-  // ESTADO INTEGRAL: Capturamos TODO lo que el usuario toca
+  // ESTADO LIMPIO: Sin el "garaje" del usuario
   const [formData, setFormData] = useState({
     nombre: '',
     celular: '',
@@ -18,14 +18,8 @@ export default function WizardContainer() {
     atributos: [] as string[],
     notasAdicionales: '',
     filtros: {
-      todos: true,
-      soloChinos: false,
-      soloEV: false,
-      soloHEV: false,
-      soloJaponeses: false,
-      soloCoreanos: false
-    },
-    vehiculos: [{ id: Date.now(), patente: '', marca: '', modelo: '', anio: '', km: '', estado: 'bueno' }]
+      todos: true, soloChinos: false, soloEV: false, soloHEV: false, soloJaponeses: false, soloCoreanos: false
+    }
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -33,7 +27,6 @@ export default function WizardContainer() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // UX: Lógica de doble barra de presupuesto (evita que se crucen)
   const handleRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const val = Number(value);
@@ -44,19 +37,14 @@ export default function WizardContainer() {
     });
   };
 
-  // Lógica de Atributos: Máximo 3 selecciones
   const toggleAtributo = (at: string) => {
     setFormData(prev => {
       const exists = prev.atributos.includes(at);
       if (!exists && prev.atributos.length >= 3) return prev;
-      return {
-        ...prev,
-        atributos: exists ? prev.atributos.filter(a => a !== at) : [...prev.atributos, at]
-      };
+      return { ...prev, atributos: exists ? prev.atributos.filter(a => a !== at) : [...prev.atributos, at] };
     });
   };
 
-  // UX: Botones ON/OFF con exclusión mutua inteligente
   const handleFilterToggle = (filterKey: keyof typeof formData.filtros) => {
     setFormData(prev => {
       const newFiltros = { ...prev.filtros };
@@ -66,7 +54,6 @@ export default function WizardContainer() {
       newFiltros[filterKey] = !newFiltros[filterKey];
       newFiltros.todos = false;
       
-      // Exclusiones automáticas
       if (filterKey === 'soloEV' && newFiltros.soloEV) newFiltros.soloHEV = false;
       if (filterKey === 'soloHEV' && newFiltros.soloHEV) newFiltros.soloEV = false;
       if (['soloChinos', 'soloJaponeses', 'soloCoreanos'].includes(filterKey) && newFiltros[filterKey]) {
@@ -79,40 +66,59 @@ export default function WizardContainer() {
     });
   };
 
-  const handleVehicleChange = (id: number, field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      vehiculos: prev.vehiculos.map(v => v.id === id ? { ...v, [field]: value } : v)
-    }));
-  };
-
-  const addVehicle = () => {
-    if (formData.vehiculos.length < 5) {
-      setFormData(prev => ({
-        ...prev,
-        vehiculos: [...prev.vehiculos, { id: Date.now(), patente: '', marca: '', modelo: '', anio: '', km: '', estado: 'bueno' }]
-      }));
-    }
-  };
-
-  // ENVÍO FINAL A BASE DE DATOS
-  const handleFinalSubmit = async () => {
-    setIsSaving(true);
+  // EL CEREBRO EN ACCIÓN: Botón único para Guardar + Analizar
+  const handleExecuteAnalysis = async () => {
+    setIsAnalyzing(true);
+    
+    // 1. Guardamos silenciosamente en Base de Datos
     const result = await saveLeadAction(formData);
+    
     if (result.success) {
-      setStep(3);
+      // 2. Llamamos a Gemini
+      try {
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          body: JSON.stringify({ leadId: result.leadId }),
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const analysis = await response.json();
+        if (analysis.success) {
+          setTop10(analysis.top10);
+          setStep(2); // Pasamos al Dossier final
+        } else {
+          alert("Error en el análisis de IA.");
+        }
+      } catch (error) {
+        console.error("Error al conectar con el Agente:", error);
+      } finally {
+        setIsAnalyzing(false);
+      }
     } else {
-      alert("Error al sincronizar con DATACAR. Verifique su conexión.");
-      setIsSaving(false);
+      alert("Error al sincronizar con la base de datos.");
+      setIsAnalyzing(false);
     }
   };
 
   const isStep1Valid = formData.nombre.trim() !== '' && formData.celular.trim() !== '';
 
+  // PANTALLA DE CARGA GLOBAL
+  if (isAnalyzing) {
+    return (
+      <div className="max-w-4xl mx-auto p-8 bg-white border border-[#3A3A3C]/20 font-inter text-center py-32">
+        <div className="w-16 h-16 border-4 border-[#00BFFF] border-t-transparent rounded-full animate-spin mx-auto mb-8"></div>
+        <h2 className="font-montserrat font-[900] text-[#0A1F33] text-2xl uppercase tracking-[4px]">Analizando Matriz</h2>
+        <p className="text-[#3A3A3C] mt-3 text-sm font-medium uppercase tracking-widest opacity-60 animate-pulse">
+          Gemini 1.5 Pro procesando 436 activos automotrices...
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-8 bg-white border border-[#3A3A3C]/20 font-inter text-[#3A3A3C]">
       
-      {/* BRANDING: Wordmark Dual (Manual v2.1) */}
+      {/* BRANDING */}
       <div className="text-center mb-10">
         <h1 className="text-5xl uppercase tracking-[1px] mb-2 select-none">
           <span className="font-montserrat font-[900] text-[#0A1F33]">DATA</span>
@@ -121,15 +127,10 @@ export default function WizardContainer() {
         <p className="font-medium text-[#3A3A3C]/60 text-[10px] uppercase tracking-[3px]">Inversión Automotriz Basada en Datos</p>
       </div>
 
-      {/* Barra de progreso Digital Cyan */}
-      <div className="mb-12 bg-slate-100 h-[2px]">
-        <div className="bg-[#00BFFF] h-[2px] transition-all duration-700" style={{ width: `${(step / totalSteps) * 100}%` }}></div>
-      </div>
-
+      {/* PASO 1: PERFIL */}
       {step === 1 && (
         <div className="space-y-10 animate-in fade-in duration-500">
-          
-          <section>
+           <section>
             <h2 className="font-montserrat font-[900] text-[#0A1F33] text-[11px] uppercase tracking-widest mb-5 border-l-4 border-[#00BFFF] pl-3">1. Perfil del Inversor</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <input name="nombre" value={formData.nombre} onChange={handleInputChange} placeholder="Nombre completo *" className="p-3 border border-[#3A3A3C]/20 outline-none focus:border-[#0A1F33] text-sm bg-slate-50/50" />
@@ -200,49 +201,48 @@ export default function WizardContainer() {
             <h2 className="font-montserrat font-[900] text-[#0A1F33] text-[11px] uppercase tracking-widest mb-4">Notas Adicionales</h2>
             <textarea name="notasAdicionales" value={formData.notasAdicionales} onChange={handleInputChange} placeholder="Requerimientos específicos..." className="w-full p-4 border border-[#3A3A3C]/20 outline-none focus:border-[#0A1F33] text-sm min-h-[80px] bg-slate-50/30" />
           </section>
+
+          {/* BOTÓN FINAL */}
+          <div className="mt-16 pt-8 border-t border-slate-100 text-right">
+            <button 
+              disabled={!isStep1Valid}
+              onClick={handleExecuteAnalysis} 
+              className="bg-[#0A1F33] text-white px-12 py-5 font-montserrat font-[900] text-xs uppercase tracking-[3px] transition-all hover:bg-[#00BFFF] hover:text-[#0A1F33] disabled:bg-slate-100 disabled:text-slate-300 w-full md:w-auto"
+            >
+              Execute Analysis →
+            </button>
+          </div>
         </div>
       )}
 
+      {/* PASO 2: EL DOSSIER DE RESULTADOS */}
       {step === 2 && (
-        <div className="space-y-6 animate-in fade-in duration-500">
-          <div className="flex justify-between items-end border-b border-slate-100 pb-4">
-            <h2 className="font-montserrat font-[900] text-[#0A1F33] text-sm uppercase tracking-widest">Activos en Evaluación ({formData.vehiculos.length}/5)</h2>
-            {formData.vehiculos.length < 5 && (
-              <button onClick={addVehicle} className="text-[10px] bg-[#0A1F33] text-white px-4 py-2 font-black uppercase tracking-widest hover:bg-[#00BFFF] hover:text-[#0A1F33] transition-all">+ Add Asset</button>
-            )}
+        <div className="animate-in fade-in zoom-in-95 duration-500">
+          <div className="border-b-2 border-[#0A1F33] pb-4 mb-8 flex justify-between items-end">
+              <div>
+                <h2 className="font-montserrat font-[900] text-[#0A1F33] text-2xl uppercase tracking-[2px]">Dossier de Inversión</h2>
+                <p className="text-[#3A3A3C]/60 text-xs font-bold uppercase tracking-widest mt-1">TOP 10 Seleccionados por IA</p>
+              </div>
+              <button onClick={() => setStep(1)} className="text-[10px] font-black uppercase tracking-widest text-[#00BFFF] hover:underline">
+                ← Volver al Perfil
+              </button>
           </div>
-          <div className="grid grid-cols-1 gap-4">
-            {formData.vehiculos.map((v) => (
-              <div key={v.id} className="p-6 bg-slate-50 border border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-1"><label className="text-[9px] font-bold text-slate-400 uppercase">Patente</label><input value={v.patente} onChange={e => handleVehicleChange(v.id, 'patente', e.target.value)} className="w-full p-2 border border-slate-200 outline-none uppercase text-xs font-bold focus:border-[#0A1F33]" placeholder="ABC 123" /></div>
-                <div className="space-y-1"><label className="text-[9px] font-bold text-slate-400 uppercase">Marca *</label><input value={v.marca} onChange={e => handleVehicleChange(v.id, 'marca', e.target.value)} className="w-full p-2 border border-slate-200 outline-none text-xs focus:border-[#0A1F33]" placeholder="Toyota" /></div>
-                <div className="space-y-1"><label className="text-[9px] font-bold text-slate-400 uppercase">Modelo *</label><input value={v.modelo} onChange={e => handleVehicleChange(v.id, 'modelo', e.target.value)} className="w-full p-2 border border-slate-200 outline-none text-xs focus:border-[#0A1F33]" placeholder="Hilux" /></div>
-                <div className="space-y-1"><label className="text-[9px] font-bold text-slate-400 uppercase">Año</label><input type="number" value={v.anio} onChange={e => handleVehicleChange(v.id, 'anio', e.target.value)} className="w-full p-2 border border-slate-200 outline-none text-xs focus:border-[#0A1F33]" placeholder="2024" /></div>
+          
+          <div className="space-y-4">
+            {top10.map((auto: any, index: number) => (
+              <div key={index} className="p-6 bg-white border border-slate-200 hover:border-[#00BFFF] transition-all flex flex-col md:flex-row gap-6 items-start group">
+                <div className="flex-shrink-0 w-12 h-12 bg-[#0A1F33] text-white flex items-center justify-center font-montserrat font-black text-xl">
+                  #{auto.puesto || index + 1}
+                </div>
+                <div className="flex-grow">
+                  <h3 className="font-montserrat font-[900] text-lg text-[#0A1F33] uppercase">{auto.marca} <span className="font-light">{auto.modelo}</span></h3>
+                  <p className="text-sm text-[#3A3A3C] mt-2 leading-relaxed">{auto.justificacion}</p>
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
-
-      {step === 3 && (
-        <div className="py-24 text-center border border-slate-100 bg-slate-50/50">
-          <div className="w-12 h-12 border-4 border-[#00BFFF] border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-          <h2 className="font-montserrat font-[900] text-[#0A1F33] text-lg uppercase tracking-[4px]">Ejecutando Análisis</h2>
-          <p className="text-[#3A3A3C] mt-2 text-xs font-medium uppercase tracking-widest opacity-60">Procesando matriz de datos DATACAR...</p>
-        </div>
-      )}
-
-      {/* NAVEGACIÓN */}
-      <div className="mt-16 flex justify-between items-center pt-8 border-t border-slate-100">
-        <button disabled={step === 1 || isSaving} onClick={() => setStep(step - 1)} className="font-montserrat font-[900] text-[10px] uppercase tracking-[3px] text-[#3A3A3C]/30 hover:text-[#0A1F33] transition-all disabled:opacity-0">← Back</button>
-        <button 
-          disabled={(step === 1 && !isStep1Valid) || isSaving}
-          onClick={step === 2 ? handleFinalSubmit : () => setStep(step + 1)} 
-          className="bg-[#00BFFF] text-[#0A1F33] px-12 py-4 font-montserrat font-[900] text-xs uppercase tracking-[3px] transition-all disabled:bg-slate-50 disabled:text-slate-300"
-        >
-          {isSaving ? 'Synchronizing...' : (step === 2 ? 'Execute Analysis' : (step === 3 ? 'Analysis Ready' : 'Next Step →'))}
-        </button>
-      </div>
     </div>
   );
 }
