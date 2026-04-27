@@ -26,7 +26,8 @@ export async function POST(req: Request) {
     // Filtro por Tipo de Carrocería blindado para Drizzle ORM
     const tiposGuardados = leadData.tipos as string[]; 
     if (tiposGuardados && Array.isArray(tiposGuardados) && tiposGuardados.length > 0) {
-      const condition = or(...tiposGuardados.map((t: string) => ilike(catalogoMatriz.segmento, `%${t}%`)));
+      // Usamos tipoCarroceria (Cámbialo a tipo_carroceria si tu schema usa guiones bajos en el nombre de la variable)
+      const condition = or(...tiposGuardados.map((t: string) => ilike(catalogoMatriz.tipoCarroceria, `%${t}%`)));
       if (condition) {
         sqlFilters.push(condition);
       }
