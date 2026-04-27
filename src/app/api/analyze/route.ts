@@ -23,20 +23,18 @@ export async function POST(req: Request) {
 
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // --- ESTRATEGIA HÍBRIDA: FILTRO SQL (DETERMINISTA) ---
+    // --- FILTRO DURO SQL ---
     const sqlFilters = [
       gte(catalogoMatriz.precioUsd, leadData.presupuestoMin - 2000),
       lte(catalogoMatriz.precioUsd, leadData.presupuestoMax + 2000)
     ];
 
-    // 1. Filtro por Tipo de Carrocería (Basado en tu columna TIPO_CARROCERIA)
     const tipos = leadData.tipos as string[]; 
     if (tipos && Array.isArray(tipos) && tipos.length > 0) {
       const condition = or(...tipos.map((t: string) => ilike(catalogoMatriz.tipoCarroceria, `%${t}%`)));
       if (condition) sqlFilters.push(condition);
     }
 
-    // 2. Filtros de Origen y Motor (Basado en columnas ORIGEN y MOTOR)
     const f = leadData.filtros as FiltrosEstrategicos;
     if (f) {
       if (f.soloChinos) sqlFilters.push(ilike(catalogoMatriz.origen, '%China%'));
@@ -45,70 +43,32 @@ export async function POST(req: Request) {
       if (f.soloEV) sqlFilters.push(ilike(catalogoMatriz.motor, '%Eléctrico%'));
       if (f.soloHEV) sqlFilters.push(ilike(catalogoMatriz.motor, '%Híbrido%'));
       if (f.soloCombustion) {
-        // Corrección de error de compilación: Validamos que la condición no sea undefined
-        const combustionCond = and(
-          notIlike(catalogoMatriz.motor, '%Eléctrico%'),
-          notIlike(catalogoMatriz.motor, '%Híbrido%')
-        );
-        if (combustionCond) sqlFilters.push(combustionCond);
+        const comb = and(notIlike(catalogoMatriz.motor, '%Eléctrico%'), notIlike(catalogoMatriz.motor, '%Híbrido%'));
+        if (comb) sqlFilters.push(comb);
       }
     }
 
-    const candidatos = await db.query.catalogoMatriz.findMany({ 
-      where: and(...sqlFilters), 
-      limit: 120 
-    });
+    const candidatos = await db.query.catalogoMatriz.findMany({ where: and(...sqlFilters), limit: 120 });
+    if (candidatos.length === 0) return NextResponse.json({ success: false, error: "Sin resultados para estos filtros." }, { status: 400 });
 
-    if (candidatos.length === 0) {
-      return NextResponse.json({ success: false, error: "No hay vehículos para estos filtros." }, { status: 400 });
-    }
+    // --- ANÁLISIS IA ---
+    const payload = candidatos.map(c => ({ id: c.id, marca: c.marca, modelo: c.modelo, precio: c.precioUsd, motor: c.motor }));
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro", generationConfig: { responseMimeType: "application/json" } });
 
-    // --- ANÁLISIS IA (PROBABILÍSTICO) CON GEMINI 2.5 PRO ---
-    const payload = candidatos.map(c => ({ 
-      id: c.id, 
-      marca: c.marca, 
-      modelo: c.modelo, 
-      precio: c.precioUsd,
-      motor: c.motor 
-    }));
-
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-pro", 
-      generationConfig: { responseMimeType: "application/json" } 
-    });
-
-    const systemPrompt = `Eres el Agente Analítico Senior de DATACAR. 
-    Analiza la matriz y selecciona el TOP 10 de modelos ÚNICOS.
-    Presupuesto: ${leadData.presupuestoMin}-${leadData.presupuestoMax} USD.
-    Atributos Críticos: ${JSON.stringify(leadData.atributos)}.
-    NOTAS DEL CLIENTOR: "${leadData.notas}"
-    
-    CATÁLOGO PRE-FILTRADO: ${JSON.stringify(payload)}
-
-    REGLA: Máximo 10 modelos distintos. Responde solo el JSON.
-    Formato: { "ranking": [ { "id": "uuid", "puesto": 1, "match_percent": 95, "etiqueta_principal": "...", "justificacion": "..." } ] }`;
+    const systemPrompt = `Eres el Agente Analítico de DATACAR. Selecciona el TOP 10 de modelos ÚNICOS.
+    Presupuesto: ${leadData.presupuestoMin}-${leadData.presupuestoMax}. Prioridades: ${JSON.stringify(leadData.atributos)}.
+    NOTAS: "${leadData.notas}".
+    REGLA: Máximo 10 modelos distintos. Responde solo JSON: { "ranking": [ { "id": "uuid", "puesto": 1, "match_percent": 95, "etiqueta_principal": "...", "justificacion": "..." } ] }`;
 
     const result = await model.generateContent(systemPrompt);
     const resultadoIA = JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
 
-    // Merge con datos reales de la DB
     const top10 = resultadoIA.ranking.map((item: any) => {
       const dbAuto = candidatos.find(c => c.id === item.id);
-      return dbAuto ? { 
-        ...item, 
-        marca: dbAuto.marca, 
-        modelo: dbAuto.modelo, 
-        version: dbAuto.version, 
-        precio_usd: dbAuto.precioUsd, 
-        origen: dbAuto.origen, 
-        url_imagen: dbAuto.urlImagen 
-      } : null;
+      return dbAuto ? { ...item, marca: dbAuto.marca, modelo: dbAuto.modelo, version: dbAuto.version, precio_usd: dbAuto.precioUsd, origen: dbAuto.origen, url_imagen: dbAuto.urlImagen } : null;
     }).filter(Boolean);
 
     return NextResponse.json({ success: true, top10 });
 
-  } catch (e) {
-    console.error("Error Crítico:", e);
-    return NextResponse.json({ success: false }, { status: 500 });
-  }
+  } catch (e) { return NextResponse.json({ success: false }, { status: 500 }); }
 }
