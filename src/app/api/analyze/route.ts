@@ -4,30 +4,34 @@ import { leads, catalogoMatriz } from '@/lib/schema';
 import { eq, and, gte, lte } from 'drizzle-orm';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!);
+// Forzamos a Vercel a permitir que la IA piense por más tiempo (máximo 60 segundos)
+export const maxDuration = 60; 
+
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '');
 
 export async function POST(req: Request) {
   try {
+    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+      console.error("FALTA API KEY DE GOOGLE EN VERCEL");
+      return NextResponse.json({ success: false, error: "API Key no configurada" }, { status: 500 });
+    }
+
     const { leadId } = await req.json();
 
-    // 1. OBTENER PERFIL DEL CLIENTE
     const leadData = await db.query.leads.findFirst({
       where: eq(leads.id, leadId)
     });
 
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // 2. FILTRADO DURO (SQL) - Mantenemos un margen amplio para optimizar velocidad
-    // Pero ahora podemos traer hasta 100 candidatos sin problemas.
     const candidatos = await db.query.catalogoMatriz.findMany({
       where: and(
-        gte(catalogoMatriz.precioUsd, leadData.presupuestoMin - 2000), // Margen de tolerancia
+        gte(catalogoMatriz.precioUsd, leadData.presupuestoMin - 2000),
         lte(catalogoMatriz.precioUsd, leadData.presupuestoMax + 2000)
       ),
       limit: 100 
     });
 
-    // 3. CONFIGURAR GEMINI 1.5 PRO
     const model = genAI.getGenerativeModel({ 
         model: "gemini-1.5-pro",
         generationConfig: { responseMimeType: "application/json" }
@@ -48,7 +52,7 @@ export async function POST(req: Request) {
     ${JSON.stringify(candidatos)}
 
     REGLAS TÉCNICAS:
-    1. El ranking debe ser de 10 vehículos.
+    1. El ranking debe ser de exactamente 10 vehículos (si hay menos candidatos, incluye los que haya).
     2. Cada "justificacion" debe mencionar datos técnicos (Motor, ADAS, Origen o Precio) para validar la inversión.
     3. No uses lenguaje emocional. Usa lenguaje de consultoría automotriz.
 
@@ -59,12 +63,15 @@ export async function POST(req: Request) {
     const response = await result.response;
     const text = response.text();
     
-    const resultadoIA = JSON.parse(text);
+    // LIMPIADOR DE MARKDOWN: Quitamos las comillas invertidas si Gemini las envía por error
+    const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    const resultadoIA = JSON.parse(cleanedText);
 
     return NextResponse.json({ success: true, top10: resultadoIA.ranking });
 
   } catch (error) {
-    console.error("Error en Agente Gemini:", error);
-    return NextResponse.json({ success: false }, { status: 500 });
+    console.error("Error Crítico en Agente Gemini:", error);
+    return NextResponse.json({ success: false, error: "Fallo en el procesamiento de IA" }, { status: 500 });
   }
 }
