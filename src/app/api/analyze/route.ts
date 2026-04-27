@@ -4,7 +4,6 @@ import { leads, catalogoMatriz } from '@/lib/schema';
 import { eq, and, gte, lte } from 'drizzle-orm';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Forzamos a Vercel a permitir que la IA piense por más tiempo (máximo 60 segundos)
 export const maxDuration = 60; 
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '');
@@ -12,7 +11,6 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
 export async function POST(req: Request) {
   try {
     if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      console.error("FALTA API KEY DE GOOGLE EN VERCEL");
       return NextResponse.json({ success: false, error: "API Key no configurada" }, { status: 500 });
     }
 
@@ -24,46 +22,63 @@ export async function POST(req: Request) {
 
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
+    // FILTRADO AMPLIO EN SQL
     const candidatos = await db.query.catalogoMatriz.findMany({
       where: and(
-        gte(catalogoMatriz.precioUsd, leadData.presupuestoMin - 2000),
-        lte(catalogoMatriz.precioUsd, leadData.presupuestoMax + 2000)
+        gte(catalogoMatriz.precioUsd, leadData.presupuestoMin - 3000),
+        lte(catalogoMatriz.precioUsd, leadData.presupuestoMax + 3000)
       ),
-      limit: 100 
+      limit: 120 
     });
 
+    // CONFIGURAR GEMINI FLASH PARA DATOS ESTRUCTURADOS
     const model = genAI.getGenerativeModel({ 
-        model: "gemini-3-flash-preview",
+        model: "gemini-3-flash-preview", 
         generationConfig: { responseMimeType: "application/json" }
     });
 
-    const systemPrompt = `Eres el Agente de Inteligencia Analítica de DATACAR. 
-    Tu tono es corporativo, de alta jerarquía, sobrio y basado estrictamente en métricas.
+    const systemPrompt = `Eres el Agente de Inteligencia Analítica Avanzada de DATACAR. 
+    Tu tono es corporativo, premium, sobrio y basado estrictamente en métricas financieras y técnicas.
 
-    MISIÓN: Analizar la matriz de activos y seleccionar el TOP 10 que represente la mejor inversión.
+    MISIÓN: Analizar la matriz de activos y seleccionar el TOP 10 que represente la mejor inversión para el perfil del cliente.
 
     PERFIL DEL INVERSOR:
-    - Rango: USD ${leadData.presupuestoMin} a ${leadData.presupuestoMax}
-    - Atributos Críticos: ${JSON.stringify(leadData.atributos)}
-    - Filtros del Cliente: ${JSON.stringify(leadData.filtros)}
-    - Notas Estratégicas: ${leadData.notas}
+    - Rango Objetivo: USD ${leadData.presupuestoMin} a ${leadData.presupuestoMax}
+    - Atributos Críticos Prioritarios (ORDEN DE IMPORTANCIA): ${JSON.stringify(leadData.atributos)}
+    - Filtros Estratégicos: ${JSON.stringify(leadData.filtros)}
+    - Requerimientos Específicos/Notas: "${leadData.notas}"
 
-    MATRIZ DE DATOS (Candidatos):
+    MATRIZ DE DATOS (Muestra de candidatos):
     ${JSON.stringify(candidatos)}
 
-    REGLAS TÉCNICAS:
-    1. El ranking debe ser de exactamente 10 vehículos (si hay menos candidatos, incluye los que haya).
-    2. Cada "justificacion" debe mencionar datos técnicos (Motor, ADAS, Origen o Precio) para validar la inversión.
-    3. No uses lenguaje emocional. Usa lenguaje de consultoría automotriz.
+    INSTRUCCIONES DE ANÁLISIS:
+    1. Evalúa cada candidato contra los Atributos Críticos y el Rango de Precios.
+    2. Selecciona los 10 mejores.
+    3. Calcula un "Match %" (0-100) basado en la alineación con el perfil.
+    4. Identifica la característica más relevante (Baúl, ADAS, Motor) como "etiqueta principal".
+    5. No uses lenguaje emocional.
 
-    RESPONDE ÚNICAMENTE EN ESTE FORMATO JSON:
-    { "ranking": [ { "id": "uuid", "puesto": 1, "marca": "...", "modelo": "...", "justificacion": "..." } ] }`;
+    RESPONDE EXCLUSIVAMENTE CON UN JSON EN ESTE FORMATO (Array de 10):
+    { 
+      "ranking": [ 
+        { 
+          "id": "uuid", 
+          "puesto": 1, 
+          "match_percent": 95, 
+          "etiqueta_principal": "string (ej. 'ADAS Full', 'Motor Turbo', 'Baúl 450L')",
+          "justificacion": "Resumen técnico corto...",
+          // Y DEVOLVER LOS DATOS DE LA DB PARA EL FRONT:
+          "marca": "...", "modelo": "...", "version": "...", "precio_usd": 12345, 
+          "origen": "...", "url_imagen": "...", "baulera_litros": 123, "adas": "..."
+        } 
+      ] 
+    }`;
 
     const result = await model.generateContent(systemPrompt);
     const response = await result.response;
     const text = response.text();
     
-    // LIMPIADOR DE MARKDOWN: Quitamos las comillas invertidas si Gemini las envía por error
+    // Limpiador de Markdown
     const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
     
     const resultadoIA = JSON.parse(cleanedText);
