@@ -3,14 +3,13 @@
 import { useState } from 'react';
 import { saveLeadAction } from '@/app/actions';
 
-// Definimos la interfaz enriquecida que viene de Gemini
+// Interfaz enriquecida
 interface IAAuto {
   id: string;
   puesto: number;
   match_percent: number;
   etiqueta_principal: string;
   justificacion: string;
-  // Datos técnicos de la base de datos
   marca: string;
   modelo: string;
   version: string;
@@ -25,7 +24,7 @@ export default function WizardContainer() {
   const [step, setStep] = useState(1);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [top10, setTop10] = useState<IAAuto[]>([]);
-  const [searchTerm, setSearchTerm] = useState(''); // Estado para el buscador final
+  const [searchTerm, setSearchTerm] = useState('');
 
   // ESTADO LIMPIO
   const [formData, setFormData] = useState({
@@ -103,11 +102,10 @@ export default function WizardContainer() {
           setTop10(analysis.top10);
           setStep(2);
         } else {
-          alert("Error en el análisis de IA. Falló la conexión con Gemini.");
+          alert("Error en el análisis de IA. Revisa los logs.");
         }
       } catch (error) {
-        console.error("Error al conectar con el Agente:", error);
-        alert("Error crítico de red.");
+        console.error("Error crítico de red:", error);
       } finally {
         setIsAnalyzing(false);
       }
@@ -151,8 +149,8 @@ export default function WizardContainer() {
             <h2 className="font-montserrat font-[900] text-[#0A1F33] text-[12px] uppercase tracking-widest mb-6 border-l-4 border-[#00BFFF] pl-3">1. Perfil del Inversor</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <input name="nombre" value={formData.nombre} onChange={handleInputChange} placeholder="Nombre completo *" className="p-3.5 border border-[#3A3A3C]/15 outline-none focus:border-[#0A1F33] text-sm bg-slate-50/30" />
-              <input name="celular" value={formData.celular} onChange={handleInputChange} placeholder="Celular (ej. 0981...)*" className="p-3.5 border border-[#3A3A3C]/15 outline-none focus:border-[#0A1F33] text-sm bg-slate-50/30" />
-              <input name="email" value={formData.email} onChange={handleInputChange} placeholder="Email corporativo" className="p-3.5 border border-[#3A3A3C]/15 outline-none focus:border-[#0A1F33] text-sm bg-slate-50/30" />
+              <input name="celular" value={formData.celular} onChange={handleInputChange} placeholder="Celular *" className="p-3.5 border border-[#3A3A3C]/15 outline-none focus:border-[#0A1F33] text-sm bg-slate-50/30" />
+              <input name="email" value={formData.email} onChange={handleInputChange} placeholder="Email" className="p-3.5 border border-[#3A3A3C]/15 outline-none focus:border-[#0A1F33] text-sm bg-slate-50/30" />
             </div>
           </section>
 
@@ -216,7 +214,7 @@ export default function WizardContainer() {
 
           <section>
             <h2 className="font-montserrat font-[900] text-[#0A1F33] text-[12px] uppercase tracking-widest mb-5">Notas Adicionales / Requerimientos</h2>
-            <textarea name="notasAdicionales" value={formData.notasAdicionales} onChange={handleInputChange} placeholder="Escribe detalles específicos (ej. 'Espacio para 3 sillas de niños', 'Uso 80% ciudad Paraguaya')..." className="w-full p-4 border border-[#3A3A3C]/15 outline-none focus:border-[#0A1F33] text-sm min-h-[100px] bg-slate-50/30" />
+            <textarea name="notasAdicionales" value={formData.notasAdicionales} onChange={handleInputChange} placeholder="..." className="w-full p-4 border border-[#3A3A3C]/15 outline-none focus:border-[#0A1F33] text-sm min-h-[100px] bg-slate-50/30" />
           </section>
 
           <div className="mt-16 pt-8 border-t border-slate-100 text-right">
@@ -231,90 +229,93 @@ export default function WizardContainer() {
         </div>
       )}
 
-      {/* PASO 2: EL DOSSIER VISUAL (LAYOUT GRILLA) */}
+      {/* PASO 2: EL DOSSIER VISUAL (LAYOUT GRILLA CON MÁS AIRE) */}
       {step === 2 && (
         <div className="animate-in fade-in zoom-in-95 duration-700">
           
-          {/* HEADER DEL DOSSIER (Simulando captura) */}
+          {/* HEADER DEL DOSSIER */}
           <div className="flex justify-between items-start mb-10 pb-6 border-b border-[#3A3A3C]/10">
               <div>
                 <h2 className="font-montserrat font-[900] text-[#0A1F33] text-3xl uppercase tracking-[2px]">Dossier de Inversión</h2>
-                <p className="text-[#3A3A3C]/70 text-sm font-semibold uppercase tracking-widest mt-1.5">Aquí están tus mejores opciones. Encontramos {top10.length} activos que coinciden con tu búsqueda.</p>
+                <p className="text-[#3A3A3C]/70 text-sm font-semibold uppercase tracking-widest mt-1.5">Encontramos {top10.length} activos que coinciden con tu búsqueda.</p>
               </div>
               <button onClick={() => setStep(1)} className="text-[11px] font-black uppercase tracking-widest text-[#00BFFF] hover:underline flex items-center gap-1.5">
                 ← Volver a editar perfil
               </button>
           </div>
           
-          {/* GRILLA DE TARJETAS (Layout idéntico a captura: 5 columnas en md/lg) */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {/* GRILLA DE TARJETAS (5 columnas en monitores grandes) */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
             {top10.map((auto) => (
-              <div key={auto.id} className="bg-white p-4.5 border border-[#3A3A3C]/10 shadow-sm flex flex-col gap-4 font-inter group hover:border-[#00BFFF] transition-all duration-300">
+              // p-6 para que RESPIRE
+              <div key={auto.id} className="bg-white p-6 border border-[#3A3A3C]/10 shadow-sm flex flex-col gap-5 font-inter group hover:border-[#00BFFF] transition-all duration-300">
                 
-                {/* 1. Imagen o Placeholder */}
-                <div className="bg-slate-100 h-28 w-full flex items-center justify-center text-[10px] text-slate-400 font-bold uppercase tracking-widest relative overflow-hidden">
+                {/* 1. Imagen - h-32 para más presencia */}
+                <div className="bg-slate-100 h-32 w-full flex items-center justify-center text-[11px] text-slate-400 font-bold uppercase tracking-widest relative overflow-hidden">
                   {auto.url_imagen ? (
                       <img src={auto.url_imagen} alt={`${auto.marca} ${auto.modelo}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   ) : (
                       'Sin imagen'
                   )}
-                  {/* Badge de puesto */}
-                  <div className="absolute top-0 left-0 bg-[#0A1F33] text-white text-[10px] font-montserrat font-black px-2.5 py-1">#{auto.puesto}</div>
+                  {/* Badge de puesto premium */}
+                  <div className="absolute top-0 left-0 bg-[#0A1F33] text-white text-[10px] font-montserrat font-black px-3 py-1.5">TOP {auto.puesto}</div>
                 </div>
 
-                {/* 2. Marca y Modelo (Bold) + Versión */}
-                <div>
-                  <h4 className="font-montserrat font-black text-[13px] leading-tight text-[#0A1F33] uppercase">
+                {/* 2. Marca, Modelo y Versión con nueva jerarquía */}
+                <div className="space-y-1.5">
+                  <h4 className="font-montserrat font-black text-[14px] leading-tight text-[#0A1F33] uppercase group-hover:text-[#00BFFF] transition-all">
                     {auto.marca} <span className="font-medium text-[#3A3A3C]">{auto.modelo}</span>
                   </h4>
-                  <p className="text-[10px] text-slate-500 uppercase font-medium mt-0.5 tracking-tight">{auto.version || 'Única'} <span className="text-slate-300">| {auto.origen}</span></p>
+                  {/* Versión y origen en línea secundaria */}
+                  <p className="text-[10px] text-slate-500 uppercase font-bold tracking-tight bg-slate-50 border border-slate-100 px-2 py-1 inline-block">
+                    {auto.version || 'Única'} <span className="text-slate-300 mx-1">|</span> {auto.origen}
+                  </p>
                 </div>
 
-                {/* 3. Precio y Rango */}
-                <div className="space-y-1 mt-auto">
-                  <p className="text-[10px] text-slate-500 font-medium">desde</p>
-                  <p className="font-montserrat font-black text-[15px] text-[#0A1F33]">
+                {/* 3. Precio sobrio */}
+                <div className="space-y-1">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Inversión inicial desde</p>
+                  <p className="font-montserrat font-black text-[16px] text-[#0A1F33]">
                     ${auto.precio_usd.toLocaleString()}
                   </p>
                 </div>
 
-                {/* 4. Tags / Badges (Identidad Visual) */}
-                <div className="flex flex-wrap gap-1.5 text-[9px] font-black uppercase tracking-tight pt-3 border-t border-slate-100">
+                {/* 4. Tags / Badges - Mejor ordenados verticalmente mt-auto */}
+                <div className="space-y-2 mt-auto pt-4 border-t border-slate-100 font-black text-[9px] uppercase tracking-tight">
                   
-                  {/* Badge Versiones (Asumimos 1 versión por registro) */}
-                  <span className="bg-slate-100 text-[#3A3A3C] px-2 py-0.5 rounded-sm">1 versión</span>
-                  
-                  {/* Badge Match (Calculado por Gemini) */}
-                  <span className="bg-[#00BFFF]/10 text-[#00BFFF] px-2 py-0.5 rounded-sm flex items-center gap-1">
-                    <div className="w-1 h-1 bg-[#00BFFF]"></div>
-                    Match {auto.match_percent}%
-                  </span>
+                  <div className="flex justify-between items-center gap-2">
+                    {/* Badge Match */}
+                    <span className="bg-[#00BFFF]/10 text-[#00BFFF] px-2.5 py-1 rounded-sm flex items-center gap-1.5 flex-1 justify-center">
+                        <div className="w-1.5 h-1.5 bg-[#00BFFF] rounded-full"></div>
+                        Match {auto.match_percent}%
+                    </span>
+                    {/* Etiqueta Principal (IA derived) */}
+                    <span className="bg-[#0A1F33]/5 text-[#0A1F33] px-2.5 py-1 rounded-sm border border-[#0A1F33]/10 flex-1 justify-center text-center">{auto.etiqueta_principal}</span>
+                  </div>
                   
                   {/* Badge Presupuesto (Verde/Rojo) */}
                   {auto.precio_usd <= formData.presupuestoMax ? (
-                       <span className="bg-[#e6fcf5] text-[#0ca678] px-2 py-0.5 rounded-sm w-full text-center">USD ${auto.precio_usd.toLocaleString()} dentro del presupuesto</span>
+                       <span className="bg-[#e6fcf5] text-[#0ca678] px-2.5 py-1.5 rounded-sm w-full text-center block">USD ${auto.precio_usd.toLocaleString()} dentro de presupuesto</span>
                   ) : (
-                      <span className="bg-[#fff5f5] text-[#ff6b6b] px-2 py-0.5 rounded-sm w-full text-center">USD ${auto.precio_usd.toLocaleString()} excede por ${(auto.precio_usd - formData.presupuestoMax).toLocaleString()}</span>
+                      <span className="bg-[#fff5f5] text-[#ff6b6b] px-2.5 py-1.5 rounded-sm w-full text-center block">USD ${auto.precio_usd.toLocaleString()} excede USD ${(auto.precio_usd - formData.presupuestoMax).toLocaleString()}</span>
                   )}
                   
-                  {/* Badge Etiqueta Principal (Derivado por Gemini) */}
-                  <span className="bg-[#0A1F33]/5 text-[#0A1F33] px-2 py-0.5 rounded-sm border border-[#0A1F33]/10">{auto.etiqueta_principal}</span>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* BUSCADOR INFERIOR (Idéntico a captura) */}
+          {/* BUSCADOR INFERIOR */}
           <div className="mt-12 p-10 bg-white border border-[#3A3A3C]/10 shadow-sm font-montserrat">
               <h3 className="text-[#0A1F33] text-sm font-black uppercase tracking-[1px] mb-3">¿No ves el auto que buscás?</h3>
-              <p className="text-[#3A3A3C]/70 text-xs font-semibold mb-6">Explora nuestro catálogo completo de 436 activos automotrices. Usa los filtros para encontrar el activo ideal.</p>
+              <p className="text-[#3A3A3C]/70 text-xs font-semibold mb-6">Explora nuestro catálogo completo de 436 activos automotrices.</p>
               
               <div className="relative max-w-2xl">
                   <input 
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Buscar por Marca, Modelo o Versión en todo el catálogo..."
+                    placeholder="Buscar por Marca, Modelo o Versión..."
                     className="w-full p-4.5 pr-16 border border-[#3A3A3C]/15 outline-none focus:border-[#00BFFF] text-xs font-semibold bg-slate-50/50"
                   />
                   <div className="absolute right-5 top-1/2 -translate-y-1/2 text-[#00BFFF] flex items-center gap-2">
@@ -322,12 +323,6 @@ export default function WizardContainer() {
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                   </div>
               </div>
-              
-              {searchTerm && (
-                  <div className="mt-6 text-xs italic text-slate-400 p-4 border border-slate-100 bg-slate-50 opacity-80 animate-in fade-in">
-                      Nota de Arquitecto: El buscador clientside está visualmente implementado. Para que funcione, necesitamos crear una Server Action nueva en `app/actions.ts` que haga `select * from catalogoMatriz where marca ilike '%${searchTerm}%'`. Por ahora, previsualizamos el layout.
-                  </div>
-              )}
           </div>
 
         </div>
