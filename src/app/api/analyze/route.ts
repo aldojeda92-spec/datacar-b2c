@@ -7,7 +7,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 export const maxDuration = 60; 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '');
 
-// Interfaz para el casting de filtros guardados en JSONB
 interface FiltrosEstrategicos {
   soloChinos?: boolean;
   soloJaponeses?: boolean;
@@ -20,27 +19,24 @@ interface FiltrosEstrategicos {
 export async function POST(req: Request) {
   try {
     const { leadId } = await req.json();
-
-    const leadData = await db.query.leads.findFirst({
-      where: eq(leads.id, leadId)
-    });
+    const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
 
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // --- ESTRATEGIA HÍBRIDA: PASO 1 - EL FILTRO DURO (SQL) ---
+    // --- ESTRATEGIA HÍBRIDA: FILTRO SQL (DETERMINISTA) ---
     const sqlFilters = [
       gte(catalogoMatriz.precioUsd, leadData.presupuestoMin - 2000),
       lte(catalogoMatriz.precioUsd, leadData.presupuestoMax + 2000)
     ];
 
-    // Filtro de Carrocería (SUV, Pickup, etc.)
+    // 1. Filtro por Tipo de Carrocería (Basado en tu columna TIPO_CARROCERIA)
     const tipos = leadData.tipos as string[]; 
     if (tipos && Array.isArray(tipos) && tipos.length > 0) {
       const condition = or(...tipos.map((t: string) => ilike(catalogoMatriz.tipoCarroceria, `%${t}%`)));
       if (condition) sqlFilters.push(condition);
     }
 
-    // Filtros Estratégicos (Origen y Motor)
+    // 2. Filtros de Origen y Motor (Basado en columnas ORIGEN y MOTOR)
     const f = leadData.filtros as FiltrosEstrategicos;
     if (f) {
       if (f.soloChinos) sqlFilters.push(ilike(catalogoMatriz.origen, '%China%'));
@@ -49,83 +45,70 @@ export async function POST(req: Request) {
       if (f.soloEV) sqlFilters.push(ilike(catalogoMatriz.motor, '%Eléctrico%'));
       if (f.soloHEV) sqlFilters.push(ilike(catalogoMatriz.motor, '%Híbrido%'));
       if (f.soloCombustion) {
-        sqlFilters.push(and(
+        // Corrección de error de compilación: Validamos que la condición no sea undefined
+        const combustionCond = and(
           notIlike(catalogoMatriz.motor, '%Eléctrico%'),
           notIlike(catalogoMatriz.motor, '%Híbrido%')
-        ));
+        );
+        if (combustionCond) sqlFilters.push(combustionCond);
       }
     }
 
-    // Ejecutamos la búsqueda purgada (Limitamos a 100 para eficiencia de tokens)
-    const candidatos = await db.query.catalogoMatriz.findMany({
-      where: and(...sqlFilters),
-      limit: 100 
+    const candidatos = await db.query.catalogoMatriz.findMany({ 
+      where: and(...sqlFilters), 
+      limit: 120 
     });
 
     if (candidatos.length === 0) {
-      return NextResponse.json({ success: false, error: "No se encontraron vehículos con estos filtros técnicos. Intenta ampliar el rango o cambiar la categoría." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "No hay vehículos para estos filtros." }, { status: 400 });
     }
 
-    // --- PASO 2 - SELECCIÓN INTELIGENTE (GEMINI 2.5 PRO) ---
-    // Payload ligero para ahorrar tokens y latencia
+    // --- ANÁLISIS IA (PROBABILÍSTICO) CON GEMINI 2.5 PRO ---
     const payload = candidatos.map(c => ({ 
       id: c.id, 
       marca: c.marca, 
       modelo: c.modelo, 
       precio: c.precioUsd,
-      motor: c.motor
+      motor: c.motor 
     }));
 
     const model = genAI.getGenerativeModel({ 
-        model: "gemini-2.5-pro", // El modelo solicitado
-        generationConfig: { responseMimeType: "application/json" } 
+      model: "gemini-2.5-pro", 
+      generationConfig: { responseMimeType: "application/json" } 
     });
 
     const systemPrompt = `Eres el Agente Analítico Senior de DATACAR. 
-    Tu misión es seleccionar el TOP 10 de modelos ÚNICOS para un inversor.
+    Analiza la matriz y selecciona el TOP 10 de modelos ÚNICOS.
+    Presupuesto: ${leadData.presupuestoMin}-${leadData.presupuestoMax} USD.
+    Atributos Críticos: ${JSON.stringify(leadData.atributos)}.
+    NOTAS DEL CLIENTOR: "${leadData.notas}"
     
-    PERFIL DEL CLIENTE:
-    - Presupuesto: USD ${leadData.presupuestoMin} a ${leadData.presupuestoMax}
-    - Prioridades Técnicas: ${JSON.stringify(leadData.atributos)}
-    - NOTAS ESTRATÉGICAS: "${leadData.notas}"
-    
-    REGLAS DE RANKING:
-    1. Debes devolver exactamente 10 puestos (si hay menos candidatos, devuélvelos todos).
-    2. NO repitas Modelos. Solo 1 versión representante por cada modelo.
-    3. Calcula el 'match_percent' basado en las notas del cliente y sus prioridades.
-    4. La 'etiqueta_principal' debe ser técnica (ej: 'Motor Turbo', 'ADAS Nivel 2', 'Bajo Consumo').
-    5. 'justificacion' es un análisis de máximo 15 palabras del por qué es una buena inversión.
+    CATÁLOGO PRE-FILTRADO: ${JSON.stringify(payload)}
 
-    DATOS DISPONIBLES:
-    ${JSON.stringify(payload)}
-
-    RESPONDE EXCLUSIVAMENTE CON ESTE JSON:
-    { "ranking": [ { "id": "uuid", "puesto": 1, "match_percent": 95, "etiqueta_principal": "...", "justificacion": "..." } ] }`;
+    REGLA: Máximo 10 modelos distintos. Responde solo el JSON.
+    Formato: { "ranking": [ { "id": "uuid", "puesto": 1, "match_percent": 95, "etiqueta_principal": "...", "justificacion": "..." } ] }`;
 
     const result = await model.generateContent(systemPrompt);
-    const responseText = result.response.text();
-    const cleanedJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    const resultadoIA = JSON.parse(cleanedJson);
+    const resultadoIA = JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
 
-    // --- PASO 3 - ENRIQUECIMIENTO FINAL ---
-    const top10Enriquecido = resultadoIA.ranking.map((item: any) => {
+    // Merge con datos reales de la DB
+    const top10 = resultadoIA.ranking.map((item: any) => {
       const dbAuto = candidatos.find(c => c.id === item.id);
-      if (!dbAuto) return null;
-      return {
-        ...item,
-        marca: dbAuto.marca,
-        modelo: dbAuto.modelo,
-        version: dbAuto.version,
-        precio_usd: dbAuto.precioUsd,
-        origen: dbAuto.origen,
-        url_imagen: dbAuto.urlImagen
-      };
+      return dbAuto ? { 
+        ...item, 
+        marca: dbAuto.marca, 
+        modelo: dbAuto.modelo, 
+        version: dbAuto.version, 
+        precio_usd: dbAuto.precioUsd, 
+        origen: dbAuto.origen, 
+        url_imagen: dbAuto.urlImagen 
+      } : null;
     }).filter(Boolean);
 
-    return NextResponse.json({ success: true, top10: top10Enriquecido });
+    return NextResponse.json({ success: true, top10 });
 
-  } catch (error) {
-    console.error("Error en API Analyze:", error);
-    return NextResponse.json({ success: false, error: "Fallo en el motor analítico de IA." }, { status: 500 });
+  } catch (e) {
+    console.error("Error Crítico:", e);
+    return NextResponse.json({ success: false }, { status: 500 });
   }
 }
