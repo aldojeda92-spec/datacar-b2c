@@ -23,10 +23,13 @@ export async function POST(req: Request) {
       lte(catalogoMatriz.precioUsd, leadData.presupuestoMax + 2000)
     ];
 
-    // Filtro por Tipo de Carrocería (SUV, Pickup, etc.) blindado para TypeScript
+    // Filtro por Tipo de Carrocería blindado para Drizzle ORM
     const tiposGuardados = leadData.tipos as string[]; 
     if (tiposGuardados && Array.isArray(tiposGuardados) && tiposGuardados.length > 0) {
-      sqlFilters.push(or(...tiposGuardados.map((t: string) => ilike(catalogoMatriz.segmento, `%${t}%`))));
+      const condition = or(...tiposGuardados.map((t: string) => ilike(catalogoMatriz.segmento, `%${t}%`)));
+      if (condition) {
+        sqlFilters.push(condition);
+      }
     }
 
     // Filtros de Origen
