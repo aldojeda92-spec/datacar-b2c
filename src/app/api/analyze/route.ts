@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { leads, catalogoMatriz } from '@/lib/schema';
-import { eq, and, gte, lte, or, ilike, inArray } from 'drizzle-orm'; // Agregamos operadores SQL
+import { eq, and, gte, lte, or, ilike } from 'drizzle-orm'; 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const maxDuration = 60; 
@@ -23,19 +23,18 @@ export async function POST(req: Request) {
       lte(catalogoMatriz.precioUsd, leadData.presupuestoMax + 2000)
     ];
 
-    // Filtro por Tipo de Carrocería (SUV, Pickup, etc.)
-    if (leadData.tipos && leadData.tipos.length > 0) {
-      // Filtramos en la base de datos usando ILIKE para que coincida con la columna 'segmento' o 'categoria'
-      // Ajusta 'segmento' al nombre real de tu columna en la DB
-      sqlFilters.push(or(...leadData.tipos.map((t: string) => ilike(catalogoMatriz.segmento, `%${t}%`))));
+    // Filtro por Tipo de Carrocería (SUV, Pickup, etc.) blindado para TypeScript
+    const tiposGuardados = leadData.tipos as string[]; 
+    if (tiposGuardados && Array.isArray(tiposGuardados) && tiposGuardados.length > 0) {
+      sqlFilters.push(or(...tiposGuardados.map((t: string) => ilike(catalogoMatriz.segmento, `%${t}%`))));
     }
 
-    // Filtros de Origen (Solo Chinos, Japoneses, etc.)
+    // Filtros de Origen
     if (leadData.filtros.soloChinos) sqlFilters.push(ilike(catalogoMatriz.origen, '%China%'));
     if (leadData.filtros.soloJaponeses) sqlFilters.push(ilike(catalogoMatriz.origen, '%Japón%'));
     if (leadData.filtros.soloCoreanos) sqlFilters.push(ilike(catalogoMatriz.origen, '%Corea%'));
 
-    // Filtros de Motor (EV / HEV)
+    // Filtros de Motor
     if (leadData.filtros.soloEV) sqlFilters.push(ilike(catalogoMatriz.motor, '%Eléctrico%'));
     if (leadData.filtros.soloHEV) sqlFilters.push(ilike(catalogoMatriz.motor, '%Híbrido%'));
 
@@ -46,7 +45,7 @@ export async function POST(req: Request) {
     });
 
     if (candidatosCompletos.length === 0) {
-      return NextResponse.json({ success: false, error: "No hay vehículos que cumplan estos filtros técnicos." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "No hay vehículos que cumplan estos filtros." }, { status: 400 });
     }
 
     // --- PASO 2 - SELECCIÓN INTELIGENTE (GEMINI FLASH) ---
