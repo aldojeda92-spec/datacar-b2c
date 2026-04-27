@@ -5,17 +5,24 @@ import { leads, vehiculos } from '@/lib/schema';
 
 export async function saveLeadAction(formData: any) {
   try {
-    // 1. Insertamos el Lead con TODOS sus filtros y atributos
     const [newLead] = await db.insert(leads).values({
       nombre: formData.nombre,
       celular: formData.celular,
-      email: formData.email || '',
+      email: formData.email,
       presupuestoMin: formData.presupuestoMin,
       presupuestoMax: formData.presupuestoMax,
-      atributos: formData.atributos, // Almacena el array de los 3 clics
-      filtros: formData.filtros,      // Almacena el estado de TODOS los botones ON/OFF
+      atributos: formData.atributos,
+      tipos: formData.tipos, // <--- AHORA GUARDAMOS ESTO
+      filtros: formData.filtros,
       notas: formData.notasAdicionales,
     }).returning();
+
+    return { success: true, leadId: newLead.id };
+  } catch (error) {
+    console.error("Error al guardar lead:", error);
+    return { success: false };
+  }
+}
 
     // 2. Insertamos cada vehículo del garaje
     if (formData.vehiculos && formData.vehiculos.length > 0) {
