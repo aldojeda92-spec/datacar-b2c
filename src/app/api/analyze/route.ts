@@ -22,18 +22,17 @@ export async function POST(req: Request) {
 
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // FILTRADO AMPLIO EN SQL
+    // AUMENTAMOS EL FILTRADO SQL A 200 PARA DARLE MÁS MODELOS ÚNICOS A GEMINI
     const candidatos = await db.query.catalogoMatriz.findMany({
       where: and(
         gte(catalogoMatriz.precioUsd, leadData.presupuestoMin - 3000),
         lte(catalogoMatriz.precioUsd, leadData.presupuestoMax + 3000)
       ),
-      limit: 120 
+      limit: 200 
     });
 
-    // CONFIGURAR GEMINI FLASH PARA DATOS ESTRUCTURADOS
     const model = genAI.getGenerativeModel({ 
-        model: "gemini-3-flash-preview", 
+        model: "gemini-1.5-flash", 
         generationConfig: { responseMimeType: "application/json" }
     });
 
@@ -44,30 +43,32 @@ export async function POST(req: Request) {
 
     PERFIL DEL INVERSOR:
     - Rango Objetivo: USD ${leadData.presupuestoMin} a ${leadData.presupuestoMax}
-    - Atributos Críticos Prioritarios (ORDEN DE IMPORTANCIA): ${JSON.stringify(leadData.atributos)}
+    - Atributos Críticos Prioritarios: ${JSON.stringify(leadData.atributos)}
     - Filtros Estratégicos: ${JSON.stringify(leadData.filtros)}
-    - Requerimientos Específicos/Notas: "${leadData.notas}"
+    - Notas/Requerimientos: "${leadData.notas}"
 
     MATRIZ DE DATOS (Muestra de candidatos):
     ${JSON.stringify(candidatos)}
 
-    INSTRUCCIONES DE ANÁLISIS:
-    1. Evalúa cada candidato contra los Atributos Críticos y el Rango de Precios.
-    2. Selecciona los 10 mejores.
-    3. Calcula un "Match %" (0-100) basado en la alineación con el perfil.
-    4. Identifica la característica más relevante (Baúl, ADAS, Motor) como "etiqueta principal".
-    5. No uses lenguaje emocional.
+    REGLAS CRÍTICAS DE SELECCIÓN (URGENTE):
+    1. Debes seleccionar exactamente 10 MODELOS ÚNICOS (DISTINTOS) de vehículos.
+    2. Está PROHIBIDO duplicar un modelo (ej. no puedes incluir 'Toyota Hilux LX' y 'Toyota Hilux SRV' como dos puestos separados. La combinación 'Marca + Modelo' debe ser única en el ranking).
+    3. Para cada MODELO ÚNICO seleccionado, elige la MEJOR VERSIÓN individual disponible en la matriz que maximice el match con el inversor. Esta versión será la 'representante' para los datos técnicos (precio, motor, etc.).
+    4. La 'justificacion' debe ser un resumen ejecutivo del por qué ese MODELO es la mejor inversión, basándose en los datos de la VERSIÓN seleccionada.
 
-    RESPONDE EXCLUSIVAMENTE CON UN JSON EN ESTE FORMATO (Array de 10):
+    INSTRUCCIONES DE ANÁLISIS:
+    - Evalúa contra Atributos Críticos y Rango de Precios.
+    - Calcula "Match %" (0-100) y define una "etiqueta_principal" técnica (ej. 'ADAS Full', 'Motor Turbo').
+
+    RESPONDE EXCLUSIVAMENTE CON UN JSON EN ESTE FORMATO (Array de 10 modelos únicos):
     { 
       "ranking": [ 
         { 
-          "id": "uuid", 
+          "id": "uuid de la versión representante", 
           "puesto": 1, 
           "match_percent": 95, 
-          "etiqueta_principal": "string (ej. 'ADAS Full', 'Motor Turbo', 'Baúl 450L')",
-          "justificacion": "Resumen técnico corto...",
-          // Y DEVOLVER LOS DATOS DE LA DB PARA EL FRONT:
+          "etiqueta_principal": "string technical tag",
+          "justificacion": "Ejecutivo y técnico...",
           "marca": "...", "modelo": "...", "version": "...", "precio_usd": 12345, 
           "origen": "...", "url_imagen": "...", "baulera_litros": 123, "adas": "..."
         } 
