@@ -12,14 +12,16 @@ export async function saveLeadAction(formData: any) {
       presupuestoMin: formData.presupuestoMin,
       presupuestoMax: formData.presupuestoMax,
       atributos: formData.atributos,
-      tipos: formData.tipos,
-      filtros: formData.filtros,
-      notas: formData.notasAdicionales,
+      motorizacion: formData.motorizacion,
+      tipoVehiculo: formData.tipoVehiculo,
+      origen: formData.origen,
+      concesionariaPreferencia: formData.concesionaria,
+      notas: formData.notas,
     }).returning();
 
     return { success: true, leadId: newLead.id };
   } catch (error) {
-    console.error("Error crítico al almacenar:", error);
+    console.error("Error al guardar lead:", error);
     return { success: false };
   }
 }
