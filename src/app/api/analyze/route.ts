@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { catalogoMatriz, leads } from '@/lib/schema';
-import { eq, and, gte, lte, ilike, sql, inArray } from 'drizzle-orm';
+import { eq, and, gte, lte, ilike, sql } from 'drizzle-orm';
 
 export const maxDuration = 60;
 
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // Mapeo exacto para origen_marca
+    // 1. MAPEO DE CRITERIOS
     const mappingOrigen: Record<string, string> = {
       'Solo Chinos': 'China',
       'Solo Japoneses': 'Japón',
@@ -23,7 +23,8 @@ export async function POST(req: Request) {
     const sMotor = leadData.motorizacion === 'Todos' ? '' : leadData.motorizacion;
     const sConcesionaria = leadData.concesionariaPreferencia === 'Todas' ? '' : leadData.concesionariaPreferencia;
 
-    const query = db.select({
+    // 2. CONSULTA CON SCORING
+    const candidatos = await db.select({
       id: catalogoMatriz.id,
       marca: catalogoMatriz.marca,
       modelo: catalogoMatriz.modelo,
@@ -50,29 +51,35 @@ export async function POST(req: Request) {
     .orderBy(sql`score DESC`, catalogoMatriz.precioUsd)
     .limit(100);
 
-    const candidatos = await query;
-
-    // Unicidad de modelos
+    // 3. UNICIDAD DE MODELOS
     const vistos = new Set();
-    const ranking = [];
+    const rankingPrevio = [];
 
     for (const auto of candidatos) {
-      if (!vistos.has(auto.modelo) && ranking.length < 10) {
+      if (!vistos.has(auto.modelo) && rankingPrevio.length < 10) {
         vistos.add(auto.modelo);
-        ranking.push({ ...auto, match_percent: auto.score >= 10000 ? 99 : 75 });
+        rankingPrevio.push(auto);
       }
     }
 
-    // Buscamos versiones para el botón "+"
-    for (let auto of ranking) {
-      auto.versiones = await db.query.catalogoMatriz.findMany({
+    // 4. BÚSQUEDA DE VERSIONES EN PARALELO (Soluciona el error de TypeScript y mejora velocidad)
+    const top10 = await Promise.all(rankingPrevio.map(async (auto) => {
+      const versiones = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo),
         orderBy: [catalogoMatriz.precioUsd]
       });
-    }
 
-    return NextResponse.json({ success: true, top10: ranking });
+      return {
+        ...auto,
+        match_percent: auto.score >= 10000 ? 99 : 75,
+        versiones: versiones // Ahora TypeScript entiende que esto es parte del nuevo objeto
+      };
+    }));
+
+    return NextResponse.json({ success: true, top10 });
+
   } catch (error: any) {
+    console.error("Error en analyze:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
