@@ -13,7 +13,6 @@ export const leads = pgTable('leads', {
   origen: text('origen'),
   concesionariaPreferencia: text('concesionaria_preferencia'),
   notas: text('notas'),
-  filtros: jsonb('filtros'), // Ahora es opcional, no romperá nada
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -25,12 +24,13 @@ export const catalogoMatriz = pgTable('catalogo_matriz', {
   version: text('version'),
   tipoCarroceria: text('tipo_carroceria'),
   precioUsd: integer('precio_usd'),
-  combustible: text('combustible'),
+  combustible: text('combustible'), // Aquí va tu motorización unificada
   motor: text('motor'),
   transmision: text('transmision'),
   traccion: text('traccion'),
   bauleraLitros: integer('baulera_litros'),
   origen: text('origen'),
+  origenMarca: text('origen_marca'), // La nueva columna estratégica
   urlImagen: text('url_imagen'),
   garantia: text('garantia'),
   subsegmento: text('subsegmento'),
