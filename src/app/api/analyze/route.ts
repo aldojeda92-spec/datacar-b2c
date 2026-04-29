@@ -11,8 +11,9 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // 1. ANALIZAMOS LOS ATRIBUTOS SELECCIONADOS POR EL USUARIO
-    const attrs = leadData.atributos || [];
+   // 1. ANALIZAMOS LOS ATRIBUTOS SELECCIONADOS POR EL USUARIO
+    // Añadimos "as string[]" para que TypeScript sepa que es una lista de textos
+    const attrs = (leadData.atributos as string[]) || [];
     const quiereSeguridad = attrs.includes('Seguridad');
     const quiereEspacio = attrs.includes('Espacio');
     const quiereTecno = attrs.includes('Tecnología');
