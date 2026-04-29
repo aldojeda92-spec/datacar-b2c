@@ -53,36 +53,22 @@ export default function WizardContainer() {
     setIsAnalyzing(true);
     try {
       const result = await saveLeadAction(formData);
-      // CORRECCIÓN DE TIPO: Verificamos que success sea true Y que leadId exista
       if (result.success && result.leadId) {
         setCurrentLeadId(result.leadId);
         const res = await fetch('/api/analyze', { 
-          method: 'POST', 
-          body: JSON.stringify({ leadId: result.leadId }),
+          method: 'POST', body: JSON.stringify({ leadId: result.leadId }),
           headers: { 'Content-Type': 'application/json' }
         });
         const data = await res.json();
-        if (data.success) { 
-          setTop10(data.top10); 
-          setStep(2); 
-          window.scrollTo(0, 0); 
-        }
-      } else {
-        alert("Error al procesar el registro del lead.");
+        if (data.success) { setTop10(data.top10); setStep(2); window.scrollTo(0, 0); }
       }
-    } catch (e) { 
-      alert("Error de conexión con el servidor."); 
-    } finally { 
-      setIsAnalyzing(false); 
-    }
+    } catch (e) { alert("Error de conexión"); } finally { setIsAnalyzing(false); }
   };
 
   const handleOpenComparison = async () => {
     const selected = top10.filter(a => compareIds.includes(a.id));
     const nombres = selected.map(a => `${a.marca} ${a.modelo}`).join(' vs ');
-    if (currentLeadId) {
-      await logComparisonAction({ leadId: currentLeadId, vIds: compareIds, nombres });
-    }
+    if (currentLeadId) await logComparisonAction({ leadId: currentLeadId, vIds: compareIds, nombres });
     setShowComparison(true);
     window.scrollTo(0, 0);
   };
@@ -94,6 +80,7 @@ export default function WizardContainer() {
     </div>
   );
 
+  // --- VISTA DE COMPARACIÓN ---
   if (showComparison) {
     const selected = top10.filter(a => compareIds.includes(a.id));
     return (
@@ -108,10 +95,12 @@ export default function WizardContainer() {
             {selected.map(auto => (
               <div key={auto.id} className="p-6 text-center space-y-4 bg-white border-x">
                 <div className="h-32 flex items-center justify-center">
-                  <img src={auto.urlImagen} className="max-h-full object-contain mx-auto" alt={auto.modelo} />
+                  <img src={auto.urlImagen} className="max-h-full object-contain mx-auto" />
                 </div>
                 <h3 className="font-black text-[#0A1F33] uppercase text-sm leading-tight">{auto.marca} <br/> {auto.modelo}</h3>
                 <p className="text-[#00BFFF] font-black text-xl">${auto.precioUsd.toLocaleString()}</p>
+                {/* CTA en el Comparador */}
+                <a href={`https://wa.me/595981123456?text=Me interesa el ${auto.marca} ${auto.modelo} del comparador Datacar.`} target="_blank" className="block w-full py-3 bg-[#0A1F33] text-white text-center font-black text-[9px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all">Quiero Comprar</a>
               </div>
             ))}
           </div>
@@ -140,15 +129,11 @@ export default function WizardContainer() {
   return (
     <div className={`min-h-screen font-inter ${step === 2 ? 'bg-[#F8FAFC]' : 'bg-white'}`}>
       
-      {/* HEADER */}
       <div className="max-w-[1600px] mx-auto p-10 flex justify-between items-center">
         <h1 className="text-3xl font-montserrat font-black text-[#0A1F33] uppercase">DATA<span className="text-[#00BFFF]">CAR</span></h1>
-        {step === 2 && (
-          <button onClick={() => setStep(1)} className="text-[10px] font-black uppercase border-b-2 border-[#00BFFF] pb-1">← Re-ajustar Búsqueda</button>
-        )}
+        {step === 2 && <button onClick={() => setStep(1)} className="text-[10px] font-black uppercase border-b-2 border-[#00BFFF] pb-1">← Re-ajustar Búsqueda</button>}
       </div>
 
-      {/* STEP 1: FORMULARIO */}
       {step === 1 && (
         <div className="max-w-4xl mx-auto p-12 animate-in fade-in duration-700">
           <div className="bg-white border border-slate-100 p-12 shadow-2xl space-y-12">
@@ -198,25 +183,25 @@ export default function WizardContainer() {
               <select value={formData.tipoVehiculo} onChange={e => setFormData({...formData, tipoVehiculo: e.target.value})} className="w-full p-3 bg-slate-50 border-b-2 text-sm outline-none font-medium">
                 {['SUV', 'Sedan', 'Hatchback', 'Pickup'].map(x => <option key={x} value={x}>{x}</option>)}
               </select>
-              <select value={formData.origen} onChange={e => setFormData({...formData, origen: e.target.value})} className="w-full p-3 bg-slate-50 border-b-2 text-sm outline-none font-medium">
+              <select value={formData.origen} onChange={e => setFormData({...formData, origen: e.target.value})} className="p-3 bg-slate-50 border-b-2 text-sm outline-none font-medium">
                 {['Todos', 'Solo Coreanos', 'Solo Japoneses', 'Solo Europeos', 'Solo Chinos'].map(x => <option key={x} value={x}>{x}</option>)}
               </select>
-              <select value={formData.concesionaria} onChange={e => setFormData({...formData, concesionaria: e.target.value})} className="w-full p-3 bg-slate-50 border-b-2 text-sm outline-none font-medium">
+              <select value={formData.concesionaria} onChange={e => setFormData({...formData, concesionaria: e.target.value})} className="p-3 bg-slate-50 border-b-2 text-sm outline-none font-medium">
                 {['Todas', 'Garden', 'Automotor', 'Santa Rosa', 'Chacomer', 'Toyotoshi', 'Condor', 'Gorostiaga'].map(x => <option key={x} value={x}>{x}</option>)}
               </select>
             </div>
 
-            <textarea value={formData.notas} onChange={e => setFormData({...formData, notas: e.target.value})} placeholder="Notas adicionales sobre tu búsqueda..." className="w-full p-4 bg-slate-50 border-b-2 text-sm min-h-[100px] outline-none font-medium" />
+            <textarea value={formData.notas} onChange={e => setFormData({...formData, notas: e.target.value})} placeholder="Notas adicionales..." className="w-full p-4 bg-slate-50 border-b-2 text-sm min-h-[100px] outline-none font-medium" />
 
             <button disabled={!isReady} onClick={handleExecute} className="w-full py-6 bg-[#0A1F33] text-white font-montserrat font-black text-xs uppercase tracking-[5px] hover:bg-[#00BFFF] transition-all disabled:opacity-20 shadow-xl">Generar Análisis Estratégico →</button>
           </div>
         </div>
       )}
 
-      {/* STEP 2: RANKING */}
       {step === 2 && (
         <div className="max-w-[1700px] mx-auto p-10 pb-40 animate-in fade-in duration-1000 space-y-12">
           
+          {/* RESUMEN DE PERSONALIZACIÓN RESTAURADO */}
           <div className="bg-[#0A1F33] p-12 text-white border-l-8 border-[#00BFFF] shadow-2xl">
             <h2 className="font-montserrat font-black text-2xl uppercase tracking-tighter">
               {formData.nombre.split(' ')[0]}, busca un auto {formData.atributos.join(', ')}.
@@ -236,6 +221,7 @@ export default function WizardContainer() {
                     {compareIds.includes(auto.id) ? '✓ SELECCIONADO' : '+ COMPARAR'}
                   </button>
                 </div>
+                {/* PADDING P-10 RESTAURADO */}
                 <div className="p-10 flex-1 flex flex-col gap-6">
                   <h4 className="font-black text-lg text-[#0A1F33] uppercase leading-tight">{auto.marca} <br/> <span className="font-light text-slate-400">{auto.modelo}</span></h4>
                   <div className="flex justify-between border-y py-4 text-sm font-black uppercase">
@@ -255,6 +241,7 @@ export default function WizardContainer() {
             ))}
           </div>
 
+          {/* DOCK COMPARADOR */}
           {compareIds.length >= 1 && (
             <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 bg-[#0A1F33] text-white p-8 shadow-2xl flex items-center gap-10 border-t-4 border-[#00BFFF] rounded-sm animate-in slide-in-from-bottom-10">
               <div className="text-sm font-bold uppercase">{compareIds.length} <span className="text-slate-500 font-light">seleccionados</span></div>
