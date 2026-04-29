@@ -4,10 +4,28 @@ import { useState } from 'react';
 import { saveLeadAction, logComparisonAction } from '@/app/actions';
 
 interface IAAuto {
-  id: string; puesto: number; match_percent: number; marca: string; modelo: string;
-  version: string; precioUsd: number; origenMarca: string; combustible: string;
-  urlImagen?: string; motor?: string; traccion?: string; transmision?: string;
-  bauleraLitros?: number; garantia?: string; versiones: any[];
+  id: string; 
+  puesto: number; 
+  match_percent: number; 
+  marca: string; 
+  modelo: string;
+  version: string; 
+  precioUsd: number; 
+  origenMarca: string; 
+  combustible: string;
+  urlImagen?: string; 
+  motor?: string; 
+  traccion?: string; 
+  transmision?: string;
+  bauleraLitros?: number; 
+  garantia?: string;
+  // NUEVOS CAMPOS PARA EL COMPONENTES
+  adas?: string;
+  airbags?: string;
+  tamanhoPantalla?: string;
+  camaras?: string;
+  plazas?: number;
+  versiones: any[];
 }
 
 export default function WizardContainer() {
