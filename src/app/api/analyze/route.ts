@@ -58,14 +58,18 @@ export async function POST(req: Request) {
       garantia: catalogoMatriz.garantia,
       airbags: catalogoMatriz.airbags,
       // 2. EL ALGORITMO DE SCORING DINÁMICO
+      // 2. EL ALGORITMO DE SCORING DINÁMICO (CORREGIDO)
       score: sql<number>`
         -- Puntaje Base por Origen y Motor
         (CASE WHEN ${catalogoMatriz.origenMarca} ILIKE ${'%' + sOrigen + '%'} THEN 3000 ELSE 0 END) +
         (CASE WHEN ${catalogoMatriz.combustible} ILIKE ${'%' + sMotor + '%'} THEN 2000 ELSE 0 END) +
         
-        -- Puntaje por SEGURIDAD
+        -- Puntaje por SEGURIDAD (Blindado contra textos vacíos en airbags)
         (CASE WHEN ${quiereSeguridad} = true THEN 
-          (CAST(COALESCE(${catalogoMatriz.airbags}, '0') AS INTEGER) * 500) + 
+          (CASE 
+            WHEN ${catalogoMatriz.airbags} ~ '^[0-9]+$' THEN CAST(${catalogoMatriz.airbags} AS INTEGER) 
+            ELSE 0 
+          END * 500) + 
           (CASE WHEN ${catalogoMatriz.adas} ILIKE '%Full%' THEN 2000 WHEN ${catalogoMatriz.adas} ILIKE '%Intermedio%' THEN 1000 ELSE 0 END)
         ELSE 0 END) +
 
@@ -81,10 +85,9 @@ export async function POST(req: Request) {
           (CASE WHEN ${catalogoMatriz.conectividad} ILIKE '%Inalámbrica%' THEN 1000 ELSE 0 END)
         ELSE 0 END) +
 
-        -- Puntaje por EFICIENCIA (Híbridos y Eléctricos)
+        -- Puntaje por EFICIENCIA
         (CASE WHEN ${quiereEficiencia} = true AND (${catalogoMatriz.combustible} ILIKE '%Hybrid%' OR ${catalogoMatriz.combustible} ILIKE '%EV%') THEN 4000 ELSE 0 END)
       `.as('score')
-    })
     .from(catalogoMatriz)
     .where(and(
       gte(catalogoMatriz.precioUsd, leadData.presupuestoMin),
