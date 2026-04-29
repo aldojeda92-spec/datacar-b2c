@@ -132,7 +132,7 @@ export default function WizardContainer() {
 
           {/* LISTA TÉCNICA (Sintaxis Corregida) */}
           {[
-            { label: 'Inversión Total', key: 'precioUsd' },
+            { label: 'Versión', key: 'version' },
             { label: 'Motorización', key: 'motor' },
             { label: 'Combustible', key: 'combustible' },
             { label: 'Transmisión', key: 'transmision' },
