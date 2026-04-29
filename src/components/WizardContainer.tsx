@@ -1,6 +1,3 @@
-Aquí tienes el código completo con el error de sintaxis (la función duplicada) corregido. He mantenido exactamente todo lo demás, incluyendo la lógica de versiones y el almacenamiento B2B.
-
-```tsx
 'use client';
 
 import { useState } from 'react';
