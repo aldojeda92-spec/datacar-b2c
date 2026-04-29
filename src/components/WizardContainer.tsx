@@ -229,12 +229,28 @@ export default function WizardContainer() {
                     <span className="text-[#0A1F33]">${auto.precioUsd?.toLocaleString()}</span>
                   </div>
                   <button onClick={() => setExpandedId(expandedId === auto.id ? null : auto.id)} className="text-[9px] font-black text-[#00BFFF] text-left uppercase tracking-widest">+ Datos Técnicos</button>
-                  {expandedId === auto.id && (
-                    <div className="text-[10px] space-y-2 text-slate-500 animate-in slide-in-from-top-1 duration-300">
-                      <p className="flex justify-between border-b pb-1"><span>Motor:</span> <span className="font-bold text-[#0A1F33]">{auto.motor || 'Consultar'}</span></p>
-                      <p className="flex justify-between border-b pb-1"><span>Garantía:</span> <span className="font-bold text-[#0A1F33]">{auto.garantia || 'Consultar'}</span></p>
-                    </div>
-                  )}
+                 {expandedId === auto.id && (
+  <div className="text-[10px] space-y-3 text-slate-500 animate-in slide-in-from-top-1 duration-300 pt-2">
+    {/* SEGURIDAD */}
+    <div className="space-y-1">
+      <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Seguridad</p>
+      <p className="flex justify-between border-b pb-1"><span>ADAS:</span> <span className="font-bold text-[#0A1F33]">{auto.adas || 'Estándar'}</span></p>
+      <p className="flex justify-between border-b pb-1"><span>Airbags:</span> <span className="font-bold text-[#0A1F33]">{auto.airbags || 'Consultar'}</span></p>
+    </div>
+    {/* TECNOLOGÍA */}
+    <div className="space-y-1">
+      <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Tecnología</p>
+      <p className="flex justify-between border-b pb-1"><span>Pantalla:</span> <span className="font-bold text-[#0A1F33]">{auto.tamanhoPantalla || 'Consultar'}</span></p>
+      <p className="flex justify-between border-b pb-1"><span>Cámaras:</span> <span className="font-bold text-[#0A1F33]">{auto.camaras || 'Retroceso'}</span></p>
+    </div>
+    {/* ESPACIO */}
+    <div className="space-y-1">
+      <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Capacidad</p>
+      <p className="flex justify-between border-b pb-1"><span>Baulera:</span> <span className="font-bold text-[#0A1F33]">{auto.bauleraLitros ? `${auto.bauleraLitros} L` : 'Consultar'}</span></p>
+      <p className="flex justify-between border-b pb-1"><span>Plazas:</span> <span className="font-bold text-[#0A1F33]">{auto.plazas || '5'}</span></p>
+    </div>
+  </div>
+)}
                   <a href={`https://wa.me/595981123456?text=Me interesa el ${auto.marca} ${auto.modelo} del ranking Datacar.`} target="_blank" className="mt-auto block w-full py-4 bg-[#0A1F33] text-white text-center font-black text-[10px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all shadow-lg">Quiero Comprar</a>
                 </div>
               </div>
