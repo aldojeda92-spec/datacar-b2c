@@ -123,12 +123,41 @@ export default function WizardContainer() {
             ))}
           </div>
           {[
+            { label: 'Inversión Total', key: 'precioUsd' },
             { label: 'Motorización', key: 'motor' },
+            { label: 'Combustible', key: 'combustible' },
             { label: 'Transmisión', key: 'transmision' },
             { label: 'Tracción', key: 'traccion' },
+            { label: 'Seguridad (ADAS)', key: 'adas' },
+            { label: 'Airbags', key: 'airbags' },
+            { label: 'Dimensiones (LxAnxAl)', key: 'dimensiones' },
+            { label: 'Despeje del Suelo', key: 'despejeSuelo' },
             { label: 'Baulera (Litros)', key: 'bauleraLitros' },
-            { label: 'Garantía', key: 'garantia' },
-            { label: 'Origen Marca', key: 'origenMarca' }
+            { label: 'Capacidad Plazas', key: 'plazas' },
+            { label: 'Infoentretenimiento', key: 'tamanhoPantalla' },
+            { label: 'Conectividad', key: 'conectividad' },
+            { label: 'Sistema de Cámaras', key: 'camaras' },
+            { label: 'Tapizado Asientos', key: 'asientoCuero' },
+            { label: 'Techo / Sunroof', key: 'techoPanoramico' },
+            { label: 'Garantía oficial', key: 'garantia' },
+            { label: 'Origen de Marca', key: 'origenMarca' },
+            { label: 'Concesionaria', key: 'concesionaria' }
+          ].map((item, idx) => (
+            <div key={idx} className={`grid grid-cols-4 gap-1 ${idx % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
+              <div className="p-6 font-black text-[9px] uppercase text-slate-500 flex items-center">{item.label}</div>
+              {selected.map(auto => (
+                <div key={auto.id} className="p-6 text-center text-xs font-bold text-[#0A1F33] flex items-center justify-center border-x">
+                  {item.key === 'dimensiones' 
+                    ? `${auto.largo || '–'}x${auto.ancho || '–'}x${auto.alto || '–'} mm`
+                    : item.key === 'precioUsd' 
+                    ? `$${auto.precioUsd?.toLocaleString()}`
+                    : item.key === 'despejeSuelo' && auto.despejeSuelo
+                    ? `${auto.despejeSuelo} mm`
+                    : (auto as any)[item.key] || '–'}
+                </div>
+              ))}
+            </div>
+          ))}
           ].map((item, idx) => (
             <div key={idx} className={`grid grid-cols-4 gap-1 ${idx % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
               <div className="p-6 font-black text-[9px] uppercase text-slate-500 flex items-center">{item.label}</div>
