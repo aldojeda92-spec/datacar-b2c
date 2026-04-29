@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import { leads, comparacionesB2b } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 
-export async function saveLeadAction(formData: any) {
+export async function saveLeadAction(formData: any): Promise<{ success: boolean; leadId?: string }> {
   try {
     const [newLead] = await db.insert(leads).values({
       nombre: formData.nombre,
