@@ -24,11 +24,9 @@ export async function POST(req: Request) {
       'Solo europeos': 'Europa',
     };
 
-   const sOrigen = mappingOrigen[leadData.origen || ''] || '';
-    // Agregamos || '' al final para que nunca sea null
+    const sOrigen = mappingOrigen[leadData.origen || ''] || '';
     const sMotor = (leadData.motorizacion === 'Todos' ? '' : leadData.motorizacion) || '';
 
-    // Función para calcular score en JS para las versiones secundarias
     const calculateMatch = (auto: any) => {
       let score = 0;
       if (auto.origenMarca?.toLowerCase().includes(sOrigen.toLowerCase())) score += 3000;
@@ -109,15 +107,53 @@ export async function POST(req: Request) {
       }
     }
 
-    const top10 = await Promise.all(rankingPrevio.map(async (auto) => {
+    // --- BLOQUE IA: GENERACIÓN DE DESTACADOS CON GEMINI-3-FLASH-PREVIEW ---
+    let veredictosIA: string[] = [];
+    try {
+      const prompt = {
+        contents: [{
+          parts: [{
+            text: `Eres un experto automotriz en Paraguay. Analiza estos 10 autos para un cliente que busca: ${attrs.join(', ')}.
+            Escribe una frase de máximo 15 palabras para CADA UNO resaltando por qué le conviene SEGÚN SUS DATOS. 
+            No los compares entre sí. No uses negritas, ni asteriscos, ni listas numeradas. Devuelve solo las frases una debajo de otra.
+
+            Lista:
+            ${rankingPrevio.map((a, i) => `${i+1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, baulera ${a.bauleraLitros}L, ADAS: ${a.adas}, Origen: ${a.origenMarca}`).join('\n')}`
+          }]
+        }]
+      };
+
+      const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(prompt)
+      });
+      
+      const aiData = await aiRes.json();
+      const rawText = aiData.candidates[0].content.parts[0].text;
+      // Separamos por líneas y limpiamos
+      veredictosIA = rawText.split('\n').filter((l: string) => l.trim().length > 5);
+    } catch (e) {
+      console.error("Error llamando a Gemini:", e);
+    }
+
+    const top10 = await Promise.all(rankingPrevio.map(async (auto, index) => {
       const vRaw = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo),
         orderBy: [catalogoMatriz.precioUsd]
       });
       
-      // Cada versión ahora lleva su propio match_percent calculado
       const versiones = vRaw.map(v => ({ ...v, match_percent: calculateMatch(v) }));
-      return { ...auto, match_percent: calculateMatch(auto), versiones };
+      
+      // Asignamos el veredicto de la IA o un fallback seguro
+      const veredictoFinal = veredictosIA[index]?.replace(/^\d+[\.\)\s]*/, '').trim() || "Excelente equilibrio técnico para tu perfil de búsqueda.";
+
+      return { 
+        ...auto, 
+        match_percent: calculateMatch(auto), 
+        veredicto: veredictoFinal,
+        versiones 
+      };
     }));
 
     return NextResponse.json({ success: true, top10 });
