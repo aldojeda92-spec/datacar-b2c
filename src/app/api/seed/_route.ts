@@ -29,26 +29,36 @@ export async function GET() {
     // Limpiamos la tabla antes de cargar
     await db.delete(catalogoMatriz);
 
-    const toInsert = results.map((row) => ({
-      concesionaria: row['Concesionaria'],
-      marca: row['Marca'],
-      modelo: row['Modelo'],
-      version: row['Versión'],
-      tipoCarroceria: row['Tipo Carrocería'],
-      // Limpieza de precio: quita cualquier caracter que no sea numero
-      precioUsd: parseInt(row['Precio (US$)']?.toString().replace(/[^0-9]/g, '') || '0'),
-      combustible: row['Combustible'],
-      motor: row['Motor (Cilindrada / HP / Torque)'],
-      transmision: row['Transmisión (MT / AT / CVT y N° de marchas)'],
-      traccion: row['Tracción'],
-      bauleraLitros: parseInt(row['Baulera (Litros)']?.toString().replace(/[^0-9]/g, '') || '0'),
-      origen: row['Origen'],
-      origenMarca: row['origen_marca'], // Coincide con tu nueva columna
-      urlImagen: row['URL de Imagen'],
-      garantia: row['Garantía'],
-      subsegmento: row['Subsegmento'],
+  const toInsert = results.map((row) => ({
+      concesionaria: row['concesionaria'],
+      marca: row['marca'],
+      modelo: row['modelo'],
+      version: row['version'],
+      tipoCarroceria: row['tipo_carroceria'],
+      precioUsd: parseInt(row['precio']?.toString().replace(/[^0-9]/g, '') || '0'),
+      combustible: row['combustible'],
+      motor: row['motor'],
+      transmision: row['transmision'],
+      traccion: row['traccion'],
+      largo: parseInt(row['largo']) || null,
+      ancho: parseInt(row['ancho']) || null,
+      alto: parseInt(row['alto']) || null,
+      despejeSuelo: parseInt(row['despeje_suelo']) || null,
+      bauleraLitros: parseInt(row['baulera']) || null,
+      plazas: parseInt(row['plazas']) || null,
+      adas: row['adas'],
+      asientoCuero: row['asiento_cuero'],
+      techoPanoramico: row['techo_panoramico'],
+      tamanhoPantalla: row['tamanho_pantalla'],
+      conectividad: row['conectividad'],
+      camaras: row['camaras'],
+      origen: row['origen'],
+      origenMarca: row['origen_marca'],
+      urlImagen: row['url_imagen'],
+      garantia: row['garantia'],
+      subsegmento: row['subsegmento'],
+      airbags: row['airbags'],
     }));
-
     // Insertar en bloques de 50 para no saturar Neon
     for (let i = 0; i < toInsert.length; i += 50) {
       await db.insert(catalogoMatriz).values(toInsert.slice(i, i + 50));
