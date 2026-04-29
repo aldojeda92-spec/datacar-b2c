@@ -145,7 +145,7 @@ export default function WizardContainer() {
                   </div>
                   <h3 className="font-black text-[#0A1F33] uppercase text-sm leading-tight">{currentAuto.marca} <br/> {currentAuto.modelo}</h3>
                   <p className="text-[#00BFFF] font-black text-xl">${currentAuto.precioUsd.toLocaleString()}</p>
-                  <a href={`https://wa.me/595981123456?text=Me interesa el ${currentAuto.marca} ${currentAuto.modelo} del comparador Datacar.`} target="_blank" className="block w-full py-3 bg-[#0A1F33] text-white text-center font-black text-[9px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all">Quiero Comprar</a>
+                  <a href={`https://wa.me/595991244469?text=Me interesa el ${currentAuto.marca} ${currentAuto.modelo} del comparador Datacar.`} target="_blank" className="block w-full py-3 bg-[#0A1F33] text-white text-center font-black text-[9px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all">Quiero Comprar</a>
                 </div>
                );
             })}
@@ -342,7 +342,7 @@ export default function WizardContainer() {
                         </div>
                       </div>
                     )}
-                    <a href={`https://wa.me/595981123456?text=Me interesa el ${currentAuto.marca} ${currentAuto.modelo} versión ${currentAuto.version} del ranking Datacar.`} target="_blank" className="mt-auto block w-full py-4 bg-[#0A1F33] text-white text-center font-black text-[10px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all shadow-lg">Quiero Comprar</a>
+                    <a href={`https://wa.me/595991244469?text=Me interesa el ${currentAuto.marca} ${currentAuto.modelo} versión ${currentAuto.version} del ranking Datacar.`} target="_blank" className="mt-auto block w-full py-4 bg-[#0A1F33] text-white text-center font-black text-[10px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all shadow-lg">Quiero Comprar</a>
                   </div>
                 </div>
               );
