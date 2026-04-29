@@ -11,12 +11,12 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // 1. PREPARACIÓN DE FILTROS (ARRAYS)
-    const attrs = (leadData.atributos as string[]) || [];
-    const sMotorizaciones = (leadData.motorizacion as string[]) || [];
-    const sTipos = (leadData.tipoVehiculo as string[]) || [];
-    const sOrigenes = (leadData.origen as string[]) || [];
-    const sConcesionarias = (leadData.concesionariaPreferencia as string[]) || [];
+  // 1. PREPARACIÓN DE FILTROS (ARRAYS) - Corregido con "as unknown"
+    const attrs = (leadData.atributos as unknown as string[]) || [];
+    const sMotorizaciones = (leadData.motorizacion as unknown as string[]) || [];
+    const sTipos = (leadData.tipoVehiculo as unknown as string[]) || [];
+    const sOrigenes = (leadData.origen as unknown as string[]) || [];
+    const sConcesionarias = (leadData.concesionariaPreferencia as unknown as string[]) || [];
 
     const quiereSeguridad = attrs.includes('Seguridad');
     const quiereEspacio = attrs.includes('Espacio');
