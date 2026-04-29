@@ -105,7 +105,7 @@ export default function WizardContainer() {
             ))}
           </div>
           {[
-            { label: 'Motorización', key: 'combustible' },
+            { label: 'Motorización', key: 'motor' },
             { label: 'Transmisión', key: 'transmision' },
             { label: 'Tracción', key: 'traccion' },
             { label: 'Baulera (Litros)', key: 'bauleraLitros' },
