@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-   // 1. ANALIZAMOS LOS ATRIBUTOS SELECCIONADOS POR EL USUARIO
+    // 1. ANALIZAMOS LOS ATRIBUTOS SELECCIONADOS POR EL USUARIO
     // Añadimos "as string[]" para que TypeScript sepa que es una lista de textos
     const attrs = (leadData.atributos as string[]) || [];
     const quiereSeguridad = attrs.includes('Seguridad');
@@ -57,7 +57,6 @@ export async function POST(req: Request) {
       camaras: catalogoMatriz.camaras,
       garantia: catalogoMatriz.garantia,
       airbags: catalogoMatriz.airbags,
-      // 2. EL ALGORITMO DE SCORING DINÁMICO
       // 2. EL ALGORITMO DE SCORING DINÁMICO (CORREGIDO)
       score: sql<number>`
         -- Puntaje Base por Origen y Motor
@@ -88,6 +87,7 @@ export async function POST(req: Request) {
         -- Puntaje por EFICIENCIA
         (CASE WHEN ${quiereEficiencia} = true AND (${catalogoMatriz.combustible} ILIKE '%Hybrid%' OR ${catalogoMatriz.combustible} ILIKE '%EV%') THEN 4000 ELSE 0 END)
       `.as('score')
+    }) // <--- Aquí faltaba cerrar el objeto y el paréntesis
     .from(catalogoMatriz)
     .where(and(
       gte(catalogoMatriz.precioUsd, leadData.presupuestoMin),
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
         orderBy: [catalogoMatriz.precioUsd]
       });
       
-      // Normalizamos el Score a un porcentaje de Match (Max estimado 15000)
+      // Normalizamos el Score a un porcentaje de Match (Max estimado 12000)
       const match_percent = Math.min(Math.round((auto.score / 12000) * 100), 99);
 
       return { ...auto, match_percent, versiones };
