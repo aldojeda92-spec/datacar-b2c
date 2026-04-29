@@ -103,19 +103,41 @@ export async function POST(req: Request) {
     }
 
     // --- IA: GENERACIÓN DE DESTACADOS ---
+  // --- 3. IA: DESTACA SOBRE LA SELECCIÓN DE 10 (CON BLINDAJE) ---
     let veredictosIA: string[] = [];
     try {
       const prompt = {
         contents: [{
           parts: [{
-            text: `Eres un experto automotriz en Paraguay. Analiza estos 10 autos para un cliente que busca: ${attrs.join(', ')}.
-            Escribe una frase de máximo 15 palabras para CADA UNO resaltando virtudes. No compares. Solo frases directas.
-            
+            text: `Eres un consultor automotriz en Paraguay. Analiza estos 10 autos para un cliente que busca: ${attrs.join(', ')}.
+            Para CADA UNO, escribe un veredicto de 15 palabras resaltando sus ventajas técnicas. No los compares entre sí.
             Lista:
-            ${finalTop.map((a, i) => `${i+1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, baulera ${a.bauleraLitros}L`).join('\n')}`
+            ${rankingUnico.map((a, i) => `${i+1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, baulera ${a.bauleraLitros}L`).join('\n')}`
           }]
         }]
       };
+
+      const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(prompt)
+      });
+      
+      const aiData = await aiRes.json();
+
+      // VALIDACIÓN CRÍTICA: ¿Gemini respondió correctamente?
+      if (aiData.candidates && aiData.candidates[0] && aiData.candidates[0].content) {
+        const rawText = aiData.candidates[0].content.parts[0].text;
+        veredictosIA = rawText.split('\n').filter((l: string) => l.trim().length > 5);
+      } else {
+        // Si Gemini devuelve error de API Key o similar, registramos el error y usamos fallback
+        console.error("Gemini API Error Detail:", JSON.stringify(aiData));
+        veredictosIA = new Array(rankingUnico.length).fill("Opción sólida por su configuración técnica y equipamiento.");
+      }
+    } catch (e) {
+      console.error("Error en llamada fetch a IA:", e);
+      veredictosIA = new Array(rankingUnico.length).fill("Análisis técnico basado en especificaciones de catálogo.");
+    };
 
       const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
         method: 'POST',
