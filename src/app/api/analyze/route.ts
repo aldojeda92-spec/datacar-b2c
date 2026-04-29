@@ -11,6 +11,13 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
+    // 1. ANALIZAMOS LOS ATRIBUTOS SELECCIONADOS POR EL USUARIO
+    const attrs = leadData.atributos || [];
+    const quiereSeguridad = attrs.includes('Seguridad');
+    const quiereEspacio = attrs.includes('Espacio');
+    const quiereTecno = attrs.includes('Tecnología');
+    const quiereEficiencia = attrs.includes('Eficiencia');
+
     const mappingOrigen: Record<string, string> = {
       'Solo Chinos': 'China',
       'Solo Japoneses': 'Japón',
@@ -49,10 +56,32 @@ export async function POST(req: Request) {
       camaras: catalogoMatriz.camaras,
       garantia: catalogoMatriz.garantia,
       airbags: catalogoMatriz.airbags,
+      // 2. EL ALGORITMO DE SCORING DINÁMICO
       score: sql<number>`
-        (CASE WHEN ${catalogoMatriz.origenMarca} ILIKE ${'%' + sOrigen + '%'} THEN 10000 ELSE 0 END) +
-        (CASE WHEN ${catalogoMatriz.combustible} ILIKE ${'%' + sMotor + '%'} THEN 5000 ELSE 0 END) +
-        (CASE WHEN ${catalogoMatriz.concesionaria} ILIKE ${'%' + sConcesionaria + '%'} THEN 2000 ELSE 0 END)
+        -- Puntaje Base por Origen y Motor
+        (CASE WHEN ${catalogoMatriz.origenMarca} ILIKE ${'%' + sOrigen + '%'} THEN 3000 ELSE 0 END) +
+        (CASE WHEN ${catalogoMatriz.combustible} ILIKE ${'%' + sMotor + '%'} THEN 2000 ELSE 0 END) +
+        
+        -- Puntaje por SEGURIDAD
+        (CASE WHEN ${quiereSeguridad} = true THEN 
+          (CAST(COALESCE(${catalogoMatriz.airbags}, '0') AS INTEGER) * 500) + 
+          (CASE WHEN ${catalogoMatriz.adas} ILIKE '%Full%' THEN 2000 WHEN ${catalogoMatriz.adas} ILIKE '%Intermedio%' THEN 1000 ELSE 0 END)
+        ELSE 0 END) +
+
+        -- Puntaje por ESPACIO
+        (CASE WHEN ${quiereEspacio} = true THEN 
+          (COALESCE(${catalogoMatriz.bauleraLitros}, 0) * 5) + 
+          (COALESCE(${catalogoMatriz.despejeSuelo}, 0) * 2)
+        ELSE 0 END) +
+
+        -- Puntaje por TECNOLOGÍA
+        (CASE WHEN ${quiereTecno} = true THEN 
+          (CASE WHEN ${catalogoMatriz.tamanhoPantalla} ILIKE '%10%' OR ${catalogoMatriz.tamanhoPantalla} ILIKE '%12%' THEN 1500 ELSE 0 END) +
+          (CASE WHEN ${catalogoMatriz.conectividad} ILIKE '%Inalámbrica%' THEN 1000 ELSE 0 END)
+        ELSE 0 END) +
+
+        -- Puntaje por EFICIENCIA (Híbridos y Eléctricos)
+        (CASE WHEN ${quiereEficiencia} = true AND (${catalogoMatriz.combustible} ILIKE '%Hybrid%' OR ${catalogoMatriz.combustible} ILIKE '%EV%') THEN 4000 ELSE 0 END)
       `.as('score')
     })
     .from(catalogoMatriz)
@@ -64,6 +93,7 @@ export async function POST(req: Request) {
     .orderBy(sql`score DESC`, catalogoMatriz.precioUsd)
     .limit(100);
 
+    // 3. AGRUPACIÓN POR MODELO (Evita mostrar 10 versiones del mismo auto)
     const vistos = new Set();
     const rankingPrevio = [];
     for (const auto of candidatos) {
@@ -78,11 +108,16 @@ export async function POST(req: Request) {
         where: eq(catalogoMatriz.modelo, auto.modelo),
         orderBy: [catalogoMatriz.precioUsd]
       });
-      return { ...auto, match_percent: auto.score >= 10000 ? 99 : 75, versiones };
+      
+      // Normalizamos el Score a un porcentaje de Match (Max estimado 15000)
+      const match_percent = Math.min(Math.round((auto.score / 12000) * 100), 99);
+
+      return { ...auto, match_percent, versiones };
     }));
 
     return NextResponse.json({ success: true, top10 });
   } catch (error: any) {
+    console.error("Error en análisis:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
