@@ -11,8 +11,6 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // 1. ANALIZAMOS LOS ATRIBUTOS SELECCIONADOS POR EL USUARIO
-    // Añadimos "as string[]" para que TypeScript sepa que es una lista de textos
     const attrs = (leadData.atributos as string[]) || [];
     const quiereSeguridad = attrs.includes('Seguridad');
     const quiereEspacio = attrs.includes('Espacio');
@@ -28,7 +26,32 @@ export async function POST(req: Request) {
 
     const sOrigen = mappingOrigen[leadData.origen || ''] || '';
     const sMotor = leadData.motorizacion === 'Todos' ? '' : leadData.motorizacion;
-    const sConcesionaria = leadData.concesionariaPreferencia === 'Todas' ? '' : leadData.concesionariaPreferencia;
+
+    // Función para calcular score en JS para las versiones secundarias
+    const calculateMatch = (auto: any) => {
+      let score = 0;
+      if (auto.origenMarca?.toLowerCase().includes(sOrigen.toLowerCase())) score += 3000;
+      if (auto.combustible?.toLowerCase().includes(sMotor.toLowerCase())) score += 2000;
+      
+      if (quiereSeguridad) {
+        const numAirbags = parseInt(auto.airbags) || 0;
+        score += (numAirbags * 500);
+        if (auto.adas?.includes('Full')) score += 2000;
+        else if (auto.adas?.includes('Intermedio')) score += 1000;
+      }
+      if (quiereEspacio) {
+        score += ((auto.bauleraLitros || 0) * 5);
+        score += ((auto.despejeSuelo || 0) * 2);
+      }
+      if (quiereTecno) {
+        if (auto.tamanhoPantalla?.includes('10') || auto.tamanhoPantalla?.includes('12')) score += 1500;
+        if (auto.conectividad?.includes('Inalámbrica')) score += 1000;
+      }
+      if (quiereEficiencia && (auto.combustible?.includes('Hybrid') || auto.combustible?.includes('EV'))) {
+        score += 4000;
+      }
+      return Math.min(Math.round((score / 12000) * 100), 99);
+    };
 
     const candidatos = await db.select({
       id: catalogoMatriz.id,
@@ -57,37 +80,16 @@ export async function POST(req: Request) {
       camaras: catalogoMatriz.camaras,
       garantia: catalogoMatriz.garantia,
       airbags: catalogoMatriz.airbags,
-      // 2. EL ALGORITMO DE SCORING DINÁMICO (CORREGIDO)
       score: sql<number>`
-        -- Puntaje Base por Origen y Motor
         (CASE WHEN ${catalogoMatriz.origenMarca} ILIKE ${'%' + sOrigen + '%'} THEN 3000 ELSE 0 END) +
         (CASE WHEN ${catalogoMatriz.combustible} ILIKE ${'%' + sMotor + '%'} THEN 2000 ELSE 0 END) +
-        
-        -- Puntaje por SEGURIDAD (Blindado contra textos vacíos en airbags)
         (CASE WHEN ${quiereSeguridad} = true THEN 
-          (CASE 
-            WHEN ${catalogoMatriz.airbags} ~ '^[0-9]+$' THEN CAST(${catalogoMatriz.airbags} AS INTEGER) 
-            ELSE 0 
-          END * 500) + 
+          (CASE WHEN ${catalogoMatriz.airbags} ~ '^[0-9]+$' THEN CAST(${catalogoMatriz.airbags} AS INTEGER) ELSE 0 END * 500) + 
           (CASE WHEN ${catalogoMatriz.adas} ILIKE '%Full%' THEN 2000 WHEN ${catalogoMatriz.adas} ILIKE '%Intermedio%' THEN 1000 ELSE 0 END)
         ELSE 0 END) +
-
-        -- Puntaje por ESPACIO
-        (CASE WHEN ${quiereEspacio} = true THEN 
-          (COALESCE(${catalogoMatriz.bauleraLitros}, 0) * 5) + 
-          (COALESCE(${catalogoMatriz.despejeSuelo}, 0) * 2)
-        ELSE 0 END) +
-
-        -- Puntaje por TECNOLOGÍA
-        (CASE WHEN ${quiereTecno} = true THEN 
-          (CASE WHEN ${catalogoMatriz.tamanhoPantalla} ILIKE '%10%' OR ${catalogoMatriz.tamanhoPantalla} ILIKE '%12%' THEN 1500 ELSE 0 END) +
-          (CASE WHEN ${catalogoMatriz.conectividad} ILIKE '%Inalámbrica%' THEN 1000 ELSE 0 END)
-        ELSE 0 END) +
-
-        -- Puntaje por EFICIENCIA
-        (CASE WHEN ${quiereEficiencia} = true AND (${catalogoMatriz.combustible} ILIKE '%Hybrid%' OR ${catalogoMatriz.combustible} ILIKE '%EV%') THEN 4000 ELSE 0 END)
+        (CASE WHEN ${quiereEspacio} = true THEN (COALESCE(${catalogoMatriz.bauleraLitros}, 0) * 5) + (COALESCE(${catalogoMatriz.despejeSuelo}, 0) * 2) ELSE 0 END)
       `.as('score')
-    }) // <--- Aquí faltaba cerrar el objeto y el paréntesis
+    })
     .from(catalogoMatriz)
     .where(and(
       gte(catalogoMatriz.precioUsd, leadData.presupuestoMin),
@@ -97,7 +99,6 @@ export async function POST(req: Request) {
     .orderBy(sql`score DESC`, catalogoMatriz.precioUsd)
     .limit(100);
 
-    // 3. AGRUPACIÓN POR MODELO (Evita mostrar 10 versiones del mismo auto)
     const vistos = new Set();
     const rankingPrevio = [];
     for (const auto of candidatos) {
@@ -108,20 +109,18 @@ export async function POST(req: Request) {
     }
 
     const top10 = await Promise.all(rankingPrevio.map(async (auto) => {
-      const versiones = await db.query.catalogoMatriz.findMany({
+      const vRaw = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo),
         orderBy: [catalogoMatriz.precioUsd]
       });
       
-      // Normalizamos el Score a un porcentaje de Match (Max estimado 12000)
-      const match_percent = Math.min(Math.round((auto.score / 12000) * 100), 99);
-
-      return { ...auto, match_percent, versiones };
+      // Cada versión ahora lleva su propio match_percent calculado
+      const versiones = vRaw.map(v => ({ ...v, match_percent: calculateMatch(v) }));
+      return { ...auto, match_percent: calculateMatch(auto), versiones };
     }));
 
     return NextResponse.json({ success: true, top10 });
   } catch (error: any) {
-    console.error("Error en análisis:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
