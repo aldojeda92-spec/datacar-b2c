@@ -115,16 +115,40 @@ export async function POST(req: Request) {
       }
     }
 
-    // 5. CÁLCULO DE MATCH % Y FORMATEO FINAL
+  // 5. CÁLCULO DE MATCH % CALIBRADO (Más generoso y detallado)
     const calculateMatch = (v: any) => {
       let currentScore = 0;
-      const totalPossible = 90000;
+      
+      // Peso Principal: Tipo de Carrocería (50.000 pts)
       if (sTipos.some(t => v.tipoCarroceria?.toLowerCase().includes(t.toLowerCase()))) currentScore += 50000;
-      if (sMotorizaciones.some(m => v.combustible?.toLowerCase().includes(m.toLowerCase()))) currentScore += 20000;
-      if (origenesDB.some(o => v.origenMarca?.toLowerCase().includes(o.toLowerCase()))) currentScore += 15000;
-      return Math.min(Math.round((currentScore / totalPossible) * 100), 99);
-    };
+      
+      // Peso Motor: (15.000 pts)
+      if (sMotorizaciones.some(m => v.combustible?.toLowerCase().includes(m.toLowerCase()))) currentScore += 15000;
+      
+      // Peso Origen: (10.000 pts)
+      if (origenesDB.some(o => v.origenMarca?.toLowerCase().includes(o.toLowerCase()))) currentScore += 10000;
 
+      // Peso Concesionaria: (5.000 pts) - Esto ayuda a diferenciar modelos iguales
+      if (sConcesionarias.some(c => v.concesionaria === c)) currentScore += 5000;
+      
+      // Peso Atributos: (Bonus de hasta 10.000 pts)
+      // Aquí es donde los números dejan de ser iguales entre modelos.
+      if (attrs.includes('Seguridad')) {
+        const airbags = parseInt(v.airbags) || 0;
+        currentScore += (airbags * 800); // Cada airbag suma y diferencia el %
+      }
+      if (attrs.includes('Espacio')) {
+        const baulera = parseInt(v.bauleraLitros) || 0;
+        currentScore += (baulera * 5); // La capacidad de carga también diferencia el %
+      }
+
+      // DIVISOR GENEROSO: 75.000 en lugar de 90.000
+      // Al ser más bajo, los porcentajes suben y se sienten más "reales".
+      const matchFinal = Math.round((currentScore / 75000) * 100);
+      
+      // Topamos en 99% para que siempre haya un margen de "perfección"
+      return Math.min(matchFinal, 99);
+    };
     const top10 = await Promise.all(finalTop.map(async (auto, index) => {
       const vRaw = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo),
