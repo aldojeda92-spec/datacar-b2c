@@ -19,12 +19,20 @@ interface IAAuto {
   transmision?: string;
   bauleraLitros?: number; 
   garantia?: string;
-  // NUEVOS CAMPOS PARA EL COMPONENTES
   adas?: string;
   airbags?: string;
   tamanhoPantalla?: string;
   camaras?: string;
   plazas?: number;
+  // ESTAS SON LAS QUE FALTABAN Y CAUSABAN EL ERROR:
+  largo?: number;
+  ancho?: number;
+  alto?: number;
+  despejeSuelo?: number;
+  asientoCuero?: string;
+  techoPanoramico?: string;
+  conectividad?: string;
+  concesionaria?: string;
   versiones: any[];
 }
 
