@@ -24,8 +24,9 @@ export async function POST(req: Request) {
       'Solo europeos': 'Europa',
     };
 
-    const sOrigen = mappingOrigen[leadData.origen || ''] || '';
-    const sMotor = leadData.motorizacion === 'Todos' ? '' : leadData.motorizacion;
+   const sOrigen = mappingOrigen[leadData.origen || ''] || '';
+    // Agregamos || '' al final para que nunca sea null
+    const sMotor = (leadData.motorizacion === 'Todos' ? '' : leadData.motorizacion) || '';
 
     // Función para calcular score en JS para las versiones secundarias
     const calculateMatch = (auto: any) => {
