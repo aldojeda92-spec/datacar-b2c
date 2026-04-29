@@ -1,6 +1,8 @@
 'use server';
+
 import { db } from '@/lib/db';
-import { leads } from '@/lib/schema';
+import { leads, comparacionesB2b } from '@/lib/schema';
+import { eq } from 'drizzle-orm';
 
 export async function saveLeadAction(formData: any) {
   try {
@@ -16,7 +18,6 @@ export async function saveLeadAction(formData: any) {
       origen: formData.origen,
       concesionariaPreferencia: formData.concesionaria,
       notas: formData.notas || '',
-      // No enviamos "filtros" para evitar el error de NULL
     }).returning();
 
     return { success: true, leadId: newLead.id };
@@ -25,9 +26,6 @@ export async function saveLeadAction(formData: any) {
     return { success: false };
   }
 }
-
-// Añade esta función a tu archivo src/app/actions.ts
-import { comparacionesB2b } from './lib/schema'; // Asegúrate de la ruta
 
 export async function logComparisonAction(data: {
   leadId: string, 
