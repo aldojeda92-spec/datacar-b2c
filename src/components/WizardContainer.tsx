@@ -204,7 +204,7 @@ export default function WizardContainer() {
           {/* RESUMEN DE PERSONALIZACIÓN RESTAURADO */}
           <div className="bg-[#0A1F33] p-12 text-white border-l-8 border-[#00BFFF] shadow-2xl">
             <h2 className="font-montserrat font-black text-2xl uppercase tracking-tighter">
-              {formData.nombre.split(' ')[0]}, busca un auto {formData.atributos.join(', ')}.
+              {formData.nombre.split(' ')[0]}, busca un auto con {formData.atributos.join(', ')}.
             </h2>
             <p className="mt-4 text-slate-400 font-medium text-sm uppercase tracking-widest underline decoration-[#00BFFF] underline-offset-8">
               Inversión: ${formData.presupuestoMin.toLocaleString()} – ${formData.presupuestoMax.toLocaleString()} | {formData.origen} | {formData.motorizacion}
