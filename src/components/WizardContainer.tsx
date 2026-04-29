@@ -146,7 +146,7 @@ export default function WizardContainer() {
             { label: 'Infoentretenimiento', key: 'tamanhoPantalla' },
             { label: 'Conectividad', key: 'conectividad' },
             { label: 'Sistema de Cámaras', key: 'camaras' },
-            { label: 'Tapizado Asientos', key: 'asientoCuero' },
+            { label: 'Tapizado en cuero', key: 'asientoCuero' },
             { label: 'Techo / Sunroof', key: 'techoPanoramico' },
             { label: 'Garantía oficial', key: 'garantia' },
             { label: 'Origen de Marca', key: 'origenMarca' },
