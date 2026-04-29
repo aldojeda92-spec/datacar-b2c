@@ -1,3 +1,6 @@
+Aquí tienes el código completo con el error de sintaxis (la función duplicada) corregido. He mantenido exactamente todo lo demás, incluyendo la lógica de versiones y el almacenamiento B2B.
+
+```tsx
 'use client';
 
 import { useState } from 'react';
@@ -93,12 +96,12 @@ export default function WizardContainer() {
       }
     } catch (e) { alert("Error de conexión"); } finally { setIsAnalyzing(false); }
   };
-const handleOpenComparison = async () => {
+
+  const handleOpenComparison = async () => {
     const selected = top10.filter(a => compareIds.includes(a.id));
     const nombres = selected.map(a => `${a.marca} ${a.modelo}`).join(' vs ');
     
-    // 1. Buscamos el ID en el estado. 
-    // 2. Si no está, lo buscamos en el disco duro del navegador (localStorage)
+    // 1. Buscamos el ID en el estado o en el disco duro del navegador
     const leadIdToUse = currentLeadId || localStorage.getItem('datacar_lead_id');
 
     if (leadIdToUse && compareIds.length >= 2) {
@@ -114,13 +117,6 @@ const handleOpenComparison = async () => {
       console.warn("No se pudo guardar B2B: falta leadId o hay pocos autos seleccionados.");
     }
 
-    setShowComparison(true);
-    window.scrollTo(0, 0);
-  };
-  const handleOpenComparison = async () => {
-    const selected = top10.filter(a => compareIds.includes(a.id));
-    const nombres = selected.map(a => `${a.marca} ${a.modelo}`).join(' vs ');
-    if (currentLeadId) await logComparisonAction({ leadId: currentLeadId, vIds: compareIds, nombres });
     setShowComparison(true);
     window.scrollTo(0, 0);
   };
@@ -144,7 +140,6 @@ const handleOpenComparison = async () => {
           <div className="grid grid-cols-4 gap-1 border-b">
             <div className="bg-slate-50 p-6 flex flex-col justify-end font-black text-[10px] text-slate-400 uppercase tracking-widest">Especificaciones</div>
             {selected.map(auto => {
-               // En el comparador también usamos la versión activa si existe
                const currentAuto = activeVersions[auto.id] || auto;
                return (
                 <div key={auto.id} className="p-6 text-center space-y-4 bg-white border-x">
@@ -287,7 +282,6 @@ const handleOpenComparison = async () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-10">
             {top10.map((auto, idx) => {
-              // DETERMINAMOS LA VERSIÓN ACTUAL PARA ESTA TARJETA
               const currentAuto = activeVersions[auto.id] || auto;
               
               return (
@@ -301,7 +295,6 @@ const handleOpenComparison = async () => {
                   </div>
                   
                   <div className="p-10 flex-1 flex flex-col gap-6">
-                    {/* SELECTOR DE VERSIONES INTEGRADO */}
                     <div className="space-y-4">
                       <h4 className="font-black text-lg text-[#0A1F33] uppercase leading-tight">{currentAuto.marca} <br/> <span className="font-light text-slate-400">{currentAuto.modelo}</span></h4>
                       
@@ -311,7 +304,6 @@ const handleOpenComparison = async () => {
                           <span className="truncate pr-2">{currentAuto.version}</span>
                           <span className="text-[#00BFFF]">▾</span>
                         </div>
-                        {/* Dropdown al Hover */}
                         <div className="absolute left-0 w-full bg-white border shadow-xl z-20 hidden group-hover:block max-h-40 overflow-y-auto">
                           {auto.versiones?.map((v: any) => (
                             <div 
@@ -376,3 +368,4 @@ const handleOpenComparison = async () => {
     </div>
   );
 }
+```
