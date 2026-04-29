@@ -35,3 +35,14 @@ export const catalogoMatriz = pgTable('catalogo_matriz', {
   garantia: text('garantia'),
   subsegmento: text('subsegmento'),
 });
+
+// Añade esto al final de tu archivo src/lib/schema.ts
+export const comparacionesB2b = pgTable('comparaciones_b2b', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  leadId: text('lead_id').references(() => leads.id),
+  vehiculo1Id: uuid('vehiculo_1_id'),
+  vehiculo2Id: uuid('vehiculo_2_id'),
+  vehiculo3Id: uuid('vehiculo_3_id'),
+  modelosComparados: text('modelos_comparados'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
