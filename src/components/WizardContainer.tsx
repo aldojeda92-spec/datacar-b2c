@@ -194,7 +194,7 @@ export default function WizardContainer() {
             </div>
 
             <button disabled={!isReady} onClick={handleExecute} className="w-full py-6 bg-[#0A1F33] text-white font-montserrat font-black text-xs uppercase tracking-[5px] hover:bg-[#00BFFF] transition-all disabled:opacity-20 shadow-xl">
-              Generar Análisis Estratégico →
+              Obtener 10 opciones →
             </button>
           </div>
         </div>
