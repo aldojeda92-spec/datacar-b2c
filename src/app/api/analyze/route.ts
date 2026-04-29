@@ -11,7 +11,6 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // 1. MAPEO DE CRITERIOS
     const mappingOrigen: Record<string, string> = {
       'Solo Chinos': 'China',
       'Solo Japoneses': 'Japón',
@@ -23,7 +22,6 @@ export async function POST(req: Request) {
     const sMotor = leadData.motorizacion === 'Todos' ? '' : leadData.motorizacion;
     const sConcesionaria = leadData.concesionariaPreferencia === 'Todas' ? '' : leadData.concesionariaPreferencia;
 
-    // 2. CONSULTA CON SCORING
     const candidatos = await db.select({
       id: catalogoMatriz.id,
       marca: catalogoMatriz.marca,
@@ -36,6 +34,9 @@ export async function POST(req: Request) {
       urlImagen: catalogoMatriz.urlImagen,
       motor: catalogoMatriz.motor,
       traccion: catalogoMatriz.traccion,
+      transmision: catalogoMatriz.transmision,   // <-- Agregado
+      bauleraLitros: catalogoMatriz.bauleraLitros, // <-- Agregado
+      garantia: catalogoMatriz.garantia,         // <-- Agregado
       score: sql<number>`
         (CASE WHEN ${catalogoMatriz.origenMarca} ILIKE ${'%' + sOrigen + '%'} THEN 10000 ELSE 0 END) +
         (CASE WHEN ${catalogoMatriz.combustible} ILIKE ${'%' + sMotor + '%'} THEN 5000 ELSE 0 END) +
@@ -51,10 +52,8 @@ export async function POST(req: Request) {
     .orderBy(sql`score DESC`, catalogoMatriz.precioUsd)
     .limit(100);
 
-    // 3. UNICIDAD DE MODELOS
     const vistos = new Set();
     const rankingPrevio = [];
-
     for (const auto of candidatos) {
       if (!vistos.has(auto.modelo) && rankingPrevio.length < 10) {
         vistos.add(auto.modelo);
@@ -62,24 +61,20 @@ export async function POST(req: Request) {
       }
     }
 
-    // 4. BÚSQUEDA DE VERSIONES EN PARALELO (Soluciona el error de TypeScript y mejora velocidad)
     const top10 = await Promise.all(rankingPrevio.map(async (auto) => {
       const versiones = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo),
         orderBy: [catalogoMatriz.precioUsd]
       });
-
       return {
         ...auto,
         match_percent: auto.score >= 10000 ? 99 : 75,
-        versiones: versiones // Ahora TypeScript entiende que esto es parte del nuevo objeto
+        versiones
       };
     }));
 
     return NextResponse.json({ success: true, top10 });
-
   } catch (error: any) {
-    console.error("Error en analyze:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
