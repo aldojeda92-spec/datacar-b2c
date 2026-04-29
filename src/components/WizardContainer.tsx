@@ -125,11 +125,12 @@ export default function WizardContainer() {
                 </div>
                 <h3 className="font-black text-[#0A1F33] uppercase text-sm leading-tight">{auto.marca} <br/> {auto.modelo}</h3>
                 <p className="text-[#00BFFF] font-black text-xl">${auto.precioUsd.toLocaleString()}</p>
-                {/* CTA en el Comparador */}
                 <a href={`https://wa.me/595981123456?text=Me interesa el ${auto.marca} ${auto.modelo} del comparador Datacar.`} target="_blank" className="block w-full py-3 bg-[#0A1F33] text-white text-center font-black text-[9px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all">Quiero Comprar</a>
               </div>
             ))}
           </div>
+
+          {/* LISTA TÉCNICA (Sintaxis Corregida) */}
           {[
             { label: 'Inversión Total', key: 'precioUsd' },
             { label: 'Motorización', key: 'motor' },
@@ -162,16 +163,6 @@ export default function WizardContainer() {
                     : item.key === 'despejeSuelo' && auto.despejeSuelo
                     ? `${auto.despejeSuelo} mm`
                     : (auto as any)[item.key] || '–'}
-                </div>
-              ))}
-            </div>
-          ))}
-          ].map((item, idx) => (
-            <div key={idx} className={`grid grid-cols-4 gap-1 ${idx % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
-              <div className="p-6 font-black text-[9px] uppercase text-slate-500 flex items-center">{item.label}</div>
-              {selected.map(auto => (
-                <div key={auto.id} className="p-6 text-center text-xs font-bold text-[#0A1F33] flex items-center justify-center border-x">
-                  {(auto as any)[item.key] || '–'}
                 </div>
               ))}
             </div>
@@ -256,7 +247,6 @@ export default function WizardContainer() {
       {step === 2 && (
         <div className="max-w-[1700px] mx-auto p-10 pb-40 animate-in fade-in duration-1000 space-y-12">
           
-          {/* RESUMEN DE PERSONALIZACIÓN RESTAURADO */}
           <div className="bg-[#0A1F33] p-12 text-white border-l-8 border-[#00BFFF] shadow-2xl">
             <h2 className="font-montserrat font-black text-2xl uppercase tracking-tighter">
               {formData.nombre.split(' ')[0]}, busca un auto con {formData.atributos.join(', ')}.
@@ -276,7 +266,6 @@ export default function WizardContainer() {
                     {compareIds.includes(auto.id) ? '✓ SELECCIONADO' : '+ COMPARAR'}
                   </button>
                 </div>
-                {/* PADDING P-10 RESTAURADO */}
                 <div className="p-10 flex-1 flex flex-col gap-6">
                   <h4 className="font-black text-lg text-[#0A1F33] uppercase leading-tight">{auto.marca} <br/> <span className="font-light text-slate-400">{auto.modelo}</span></h4>
                   <div className="flex justify-between border-y py-4 text-sm font-black uppercase">
@@ -284,35 +273,31 @@ export default function WizardContainer() {
                     <span className="text-[#0A1F33]">${auto.precioUsd?.toLocaleString()}</span>
                   </div>
                   <button onClick={() => setExpandedId(expandedId === auto.id ? null : auto.id)} className="text-[9px] font-black text-[#00BFFF] text-left uppercase tracking-widest">+ Datos Técnicos</button>
-                 {expandedId === auto.id && (
-  <div className="text-[10px] space-y-3 text-slate-500 animate-in slide-in-from-top-1 duration-300 pt-2">
-    {/* SEGURIDAD */}
-    <div className="space-y-1">
-      <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Seguridad</p>
-      <p className="flex justify-between border-b pb-1"><span>ADAS:</span> <span className="font-bold text-[#0A1F33]">{auto.adas || 'Estándar'}</span></p>
-      <p className="flex justify-between border-b pb-1"><span>Airbags:</span> <span className="font-bold text-[#0A1F33]">{auto.airbags || 'Consultar'}</span></p>
-    </div>
-    {/* TECNOLOGÍA */}
-    <div className="space-y-1">
-      <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Tecnología</p>
-      <p className="flex justify-between border-b pb-1"><span>Pantalla:</span> <span className="font-bold text-[#0A1F33]">{auto.tamanhoPantalla || 'Consultar'}</span></p>
-      <p className="flex justify-between border-b pb-1"><span>Cámaras:</span> <span className="font-bold text-[#0A1F33]">{auto.camaras || 'Retroceso'}</span></p>
-    </div>
-    {/* ESPACIO */}
-    <div className="space-y-1">
-      <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Capacidad</p>
-      <p className="flex justify-between border-b pb-1"><span>Baulera:</span> <span className="font-bold text-[#0A1F33]">{auto.bauleraLitros ? `${auto.bauleraLitros} L` : 'Consultar'}</span></p>
-      <p className="flex justify-between border-b pb-1"><span>Plazas:</span> <span className="font-bold text-[#0A1F33]">{auto.plazas || '5'}</span></p>
-    </div>
-  </div>
-)}
+                  {expandedId === auto.id && (
+                    <div className="text-[10px] space-y-3 text-slate-500 animate-in slide-in-from-top-1 duration-300 pt-2">
+                      <div className="space-y-1">
+                        <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Seguridad</p>
+                        <p className="flex justify-between border-b pb-1"><span>ADAS:</span> <span className="font-bold text-[#0A1F33]">{auto.adas || 'Estándar'}</span></p>
+                        <p className="flex justify-between border-b pb-1"><span>Airbags:</span> <span className="font-bold text-[#0A1F33]">{auto.airbags || 'Consultar'}</span></p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Tecnología</p>
+                        <p className="flex justify-between border-b pb-1"><span>Pantalla:</span> <span className="font-bold text-[#0A1F33]">{auto.tamanhoPantalla || 'Consultar'}</span></p>
+                        <p className="flex justify-between border-b pb-1"><span>Cámaras:</span> <span className="font-bold text-[#0A1F33]">{auto.camaras || 'Retroceso'}</span></p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Capacidad</p>
+                        <p className="flex justify-between border-b pb-1"><span>Baulera:</span> <span className="font-bold text-[#0A1F33]">{auto.bauleraLitros ? `${auto.bauleraLitros} L` : 'Consultar'}</span></p>
+                        <p className="flex justify-between border-b pb-1"><span>Plazas:</span> <span className="font-bold text-[#0A1F33]">{auto.plazas || '5'}</span></p>
+                      </div>
+                    </div>
+                  )}
                   <a href={`https://wa.me/595981123456?text=Me interesa el ${auto.marca} ${auto.modelo} del ranking Datacar.`} target="_blank" className="mt-auto block w-full py-4 bg-[#0A1F33] text-white text-center font-black text-[10px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all shadow-lg">Quiero Comprar</a>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* DOCK COMPARADOR */}
           {compareIds.length >= 1 && (
             <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 bg-[#0A1F33] text-white p-8 shadow-2xl flex items-center gap-10 border-t-4 border-[#00BFFF] rounded-sm animate-in slide-in-from-bottom-10">
               <div className="text-sm font-bold uppercase">{compareIds.length} <span className="text-slate-500 font-light">seleccionados</span></div>
