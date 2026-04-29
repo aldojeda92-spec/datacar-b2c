@@ -83,6 +83,7 @@ export default function WizardContainer() {
       const result = await saveLeadAction(formData);
       if (result.success && result.leadId) {
         setCurrentLeadId(result.leadId);
+        localStorage.setItem('datacar_lead_id', result.leadId);
         const res = await fetch('/api/analyze', { 
           method: 'POST', body: JSON.stringify({ leadId: result.leadId }),
           headers: { 'Content-Type': 'application/json' }
@@ -92,7 +93,30 @@ export default function WizardContainer() {
       }
     } catch (e) { alert("Error de conexión"); } finally { setIsAnalyzing(false); }
   };
+const handleOpenComparison = async () => {
+    const selected = top10.filter(a => compareIds.includes(a.id));
+    const nombres = selected.map(a => `${a.marca} ${a.modelo}`).join(' vs ');
+    
+    // 1. Buscamos el ID en el estado. 
+    // 2. Si no está, lo buscamos en el disco duro del navegador (localStorage)
+    const leadIdToUse = currentLeadId || localStorage.getItem('datacar_lead_id');
 
+    if (leadIdToUse && compareIds.length >= 2) {
+      console.log("Enviando datos B2B para el Lead:", leadIdToUse);
+      
+      // Ejecutamos la acción de guardado en Neon
+      await logComparisonAction({ 
+        leadId: leadIdToUse, 
+        vIds: compareIds, 
+        nombres: nombres 
+      });
+    } else {
+      console.warn("No se pudo guardar B2B: falta leadId o hay pocos autos seleccionados.");
+    }
+
+    setShowComparison(true);
+    window.scrollTo(0, 0);
+  };
   const handleOpenComparison = async () => {
     const selected = top10.filter(a => compareIds.includes(a.id));
     const nombres = selected.map(a => `${a.marca} ${a.modelo}`).join(' vs ');
