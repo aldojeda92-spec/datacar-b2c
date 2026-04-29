@@ -34,9 +34,21 @@ export async function POST(req: Request) {
       urlImagen: catalogoMatriz.urlImagen,
       motor: catalogoMatriz.motor,
       traccion: catalogoMatriz.traccion,
-      transmision: catalogoMatriz.transmision,   // <-- Agregado
-      bauleraLitros: catalogoMatriz.bauleraLitros, // <-- Agregado
-      garantia: catalogoMatriz.garantia,         // <-- Agregado
+      transmision: catalogoMatriz.transmision,
+      bauleraLitros: catalogoMatriz.bauleraLitros,
+      largo: catalogoMatriz.largo,
+      ancho: catalogoMatriz.ancho,
+      alto: catalogoMatriz.alto,
+      despejeSuelo: catalogoMatriz.despejeSuelo,
+      plazas: catalogoMatriz.plazas,
+      adas: catalogoMatriz.adas,
+      asientoCuero: catalogoMatriz.asientoCuero,
+      techoPanoramico: catalogoMatriz.techoPanoramico,
+      tamanhoPantalla: catalogoMatriz.tamanhoPantalla,
+      conectividad: catalogoMatriz.conectividad,
+      camaras: catalogoMatriz.camaras,
+      garantia: catalogoMatriz.garantia,
+      airbags: catalogoMatriz.airbags,
       score: sql<number>`
         (CASE WHEN ${catalogoMatriz.origenMarca} ILIKE ${'%' + sOrigen + '%'} THEN 10000 ELSE 0 END) +
         (CASE WHEN ${catalogoMatriz.combustible} ILIKE ${'%' + sMotor + '%'} THEN 5000 ELSE 0 END) +
@@ -66,11 +78,7 @@ export async function POST(req: Request) {
         where: eq(catalogoMatriz.modelo, auto.modelo),
         orderBy: [catalogoMatriz.precioUsd]
       });
-      return {
-        ...auto,
-        match_percent: auto.score >= 10000 ? 99 : 75,
-        versiones
-      };
+      return { ...auto, match_percent: auto.score >= 10000 ? 99 : 75, versiones };
     }));
 
     return NextResponse.json({ success: true, top10 });
