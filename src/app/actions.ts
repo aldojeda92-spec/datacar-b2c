@@ -25,3 +25,26 @@ export async function saveLeadAction(formData: any) {
     return { success: false };
   }
 }
+
+// Añade esta función a tu archivo src/app/actions.ts
+import { comparacionesB2b } from './lib/schema'; // Asegúrate de la ruta
+
+export async function logComparisonAction(data: {
+  leadId: string, 
+  vIds: string[], 
+  nombres: string 
+}) {
+  try {
+    await db.insert(comparacionesB2b).values({
+      leadId: data.leadId,
+      vehiculo1Id: data.vIds[0] as any,
+      vehiculo2Id: data.vIds[1] as any,
+      vehiculo3Id: data.vIds[2] as any || null,
+      modelosComparados: data.nombres
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Error B2B Log:", error);
+    return { success: false };
+  }
+}
