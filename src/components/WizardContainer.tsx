@@ -32,6 +32,7 @@ interface IAAuto {
   techoPanoramico?: string;
   conectividad?: string;
   concesionaria?: string;
+  veredicto: string; // AGREGADO PARA IA
   versiones: any[];
 }
 
@@ -290,8 +291,18 @@ export default function WizardContainer() {
                       {compareIds.includes(auto.id) ? '✓ SELECCIONADO' : '+ COMPARAR'}
                     </button>
                   </div>
+
+                  {/* AGREGADO: CÁPSULA DE VEREDICTO IA */}
+                  <div className="px-10 -mt-6 mb-2 relative z-10">
+                    <div className="bg-slate-50 border-l-2 border-[#00BFFF] p-3 rounded-r-lg shadow-sm">
+                      <p className="text-[10px] leading-relaxed text-slate-600 italic">
+                        <span className="font-black text-[#0A1F33] not-italic text-[9px] uppercase tracking-tighter mr-2">Análisis Datacar:</span>
+                        "{currentAuto.veredicto || "Analizando configuración técnica..."}"
+                      </p>
+                    </div>
+                  </div>
                   
-                  <div className="p-10 flex-1 flex flex-col gap-6">
+                  <div className="p-10 pt-4 flex-1 flex flex-col gap-6">
                     <div className="space-y-4">
                       <h4 className="font-black text-lg text-[#0A1F33] uppercase leading-tight">{currentAuto.marca} <br/> <span className="font-light text-slate-400">{currentAuto.modelo}</span></h4>
                       
