@@ -24,7 +24,6 @@ interface IAAuto {
   tamanhoPantalla?: string;
   camaras?: string;
   plazas?: number;
-  // ESTAS SON LAS QUE FALTABAN Y CAUSABAN EL ERROR:
   largo?: number;
   ancho?: number;
   alto?: number;
@@ -44,6 +43,9 @@ export default function WizardContainer() {
   const [top10, setTop10] = useState<IAAuto[]>([]);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  
+  // ESTADO PARA MANEJAR LA VERSIÓN ACTIVA DE CADA TARJETA
+  const [activeVersions, setActiveVersions] = useState<Record<string, IAAuto>>({});
 
   const [formData, setFormData] = useState({
     nombre: '', celular: '', email: '', presupuestoMin: 20000, presupuestoMax: 50000,
@@ -106,7 +108,6 @@ export default function WizardContainer() {
     </div>
   );
 
-  // --- VISTA DE COMPARACIÓN ---
   if (showComparison) {
     const selected = top10.filter(a => compareIds.includes(a.id));
     return (
@@ -118,19 +119,22 @@ export default function WizardContainer() {
           </div>
           <div className="grid grid-cols-4 gap-1 border-b">
             <div className="bg-slate-50 p-6 flex flex-col justify-end font-black text-[10px] text-slate-400 uppercase tracking-widest">Especificaciones</div>
-            {selected.map(auto => (
-              <div key={auto.id} className="p-6 text-center space-y-4 bg-white border-x">
-                <div className="h-32 flex items-center justify-center">
-                  <img src={auto.urlImagen} className="max-h-full object-contain mx-auto" />
+            {selected.map(auto => {
+               // En el comparador también usamos la versión activa si existe
+               const currentAuto = activeVersions[auto.id] || auto;
+               return (
+                <div key={auto.id} className="p-6 text-center space-y-4 bg-white border-x">
+                  <div className="h-32 flex items-center justify-center">
+                    <img src={currentAuto.urlImagen} className="max-h-full object-contain mx-auto" alt={currentAuto.modelo} />
+                  </div>
+                  <h3 className="font-black text-[#0A1F33] uppercase text-sm leading-tight">{currentAuto.marca} <br/> {currentAuto.modelo}</h3>
+                  <p className="text-[#00BFFF] font-black text-xl">${currentAuto.precioUsd.toLocaleString()}</p>
+                  <a href={`https://wa.me/595981123456?text=Me interesa el ${currentAuto.marca} ${currentAuto.modelo} del comparador Datacar.`} target="_blank" className="block w-full py-3 bg-[#0A1F33] text-white text-center font-black text-[9px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all">Quiero Comprar</a>
                 </div>
-                <h3 className="font-black text-[#0A1F33] uppercase text-sm leading-tight">{auto.marca} <br/> {auto.modelo}</h3>
-                <p className="text-[#00BFFF] font-black text-xl">${auto.precioUsd.toLocaleString()}</p>
-                <a href={`https://wa.me/595981123456?text=Me interesa el ${auto.marca} ${auto.modelo} del comparador Datacar.`} target="_blank" className="block w-full py-3 bg-[#0A1F33] text-white text-center font-black text-[9px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all">Quiero Comprar</a>
-              </div>
-            ))}
+               );
+            })}
           </div>
 
-          {/* LISTA TÉCNICA (Sintaxis Corregida) */}
           {[
             { label: 'Versión', key: 'version' },
             { label: 'Motorización', key: 'motor' },
@@ -154,17 +158,20 @@ export default function WizardContainer() {
           ].map((item, idx) => (
             <div key={idx} className={`grid grid-cols-4 gap-1 ${idx % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
               <div className="p-6 font-black text-[9px] uppercase text-slate-500 flex items-center">{item.label}</div>
-              {selected.map(auto => (
-                <div key={auto.id} className="p-6 text-center text-xs font-bold text-[#0A1F33] flex items-center justify-center border-x">
-                  {item.key === 'dimensiones' 
-                    ? `${auto.largo || '–'}x${auto.ancho || '–'}x${auto.alto || '–'} mm`
-                    : item.key === 'precioUsd' 
-                    ? `$${auto.precioUsd?.toLocaleString()}`
-                    : item.key === 'despejeSuelo' && auto.despejeSuelo
-                    ? `${auto.despejeSuelo} mm`
-                    : (auto as any)[item.key] || '–'}
-                </div>
-              ))}
+              {selected.map(auto => {
+                const currentAuto = activeVersions[auto.id] || auto;
+                return (
+                  <div key={auto.id} className="p-6 text-center text-xs font-bold text-[#0A1F33] flex items-center justify-center border-x">
+                    {item.key === 'dimensiones' 
+                      ? `${currentAuto.largo || '–'}x${currentAuto.ancho || '–'}x${currentAuto.alto || '–'} mm`
+                      : item.key === 'precioUsd' 
+                      ? `$${currentAuto.precioUsd?.toLocaleString()}`
+                      : item.key === 'despejeSuelo' && currentAuto.despejeSuelo
+                      ? `${currentAuto.despejeSuelo} mm`
+                      : (currentAuto as any)[item.key] || '–'}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
@@ -174,7 +181,6 @@ export default function WizardContainer() {
 
   return (
     <div className={`min-h-screen font-inter ${step === 2 ? 'bg-[#F8FAFC]' : 'bg-white'}`}>
-      
       <div className="max-w-[1600px] mx-auto p-10 flex justify-between items-center">
         <h1 className="text-3xl font-montserrat font-black text-[#0A1F33] uppercase">DATA<span className="text-[#00BFFF]">CAR</span></h1>
         {step === 2 && <button onClick={() => setStep(1)} className="text-[10px] font-black uppercase border-b-2 border-[#00BFFF] pb-1">← Re-ajustar Búsqueda</button>}
@@ -183,7 +189,6 @@ export default function WizardContainer() {
       {step === 1 && (
         <div className="max-w-4xl mx-auto p-12 animate-in fade-in duration-700">
           <div className="bg-white border border-slate-100 p-12 shadow-2xl space-y-12">
-            
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div className="space-y-1">
                 <label className="text-[9px] font-black uppercase text-slate-400">Nombre *</label>
@@ -257,45 +262,78 @@ export default function WizardContainer() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-10">
-            {top10.map((auto, idx) => (
-              <div key={auto.id} className={`bg-white border flex flex-col transition-all relative ${compareIds.includes(auto.id) ? 'border-[#00BFFF] ring-4 ring-[#00BFFF]/10' : 'border-slate-100 shadow-sm'}`}>
-                <div className="absolute -top-3 -left-3 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-10 shadow-lg">{idx + 1}</div>
-                <div className="relative h-56 bg-slate-50 overflow-hidden">
-                  <img src={auto.urlImagen} className="w-full h-full object-cover" alt={auto.modelo} />
-                  <button onClick={() => toggleCompare(auto.id)} className={`absolute top-4 right-4 px-3 py-1 text-[8px] font-black border transition-all ${compareIds.includes(auto.id) ? 'bg-[#00BFFF] text-white border-[#00BFFF]' : 'bg-white/90 text-slate-400 border-slate-200 hover:text-[#0A1F33]'}`}>
-                    {compareIds.includes(auto.id) ? '✓ SELECCIONADO' : '+ COMPARAR'}
-                  </button>
-                </div>
-                <div className="p-10 flex-1 flex flex-col gap-6">
-                  <h4 className="font-black text-lg text-[#0A1F33] uppercase leading-tight">{auto.marca} <br/> <span className="font-light text-slate-400">{auto.modelo}</span></h4>
-                  <div className="flex justify-between border-y py-4 text-sm font-black uppercase">
-                    <span className="text-[#00BFFF]">{auto.match_percent}% Match</span>
-                    <span className="text-[#0A1F33]">${auto.precioUsd?.toLocaleString()}</span>
+            {top10.map((auto, idx) => {
+              // DETERMINAMOS LA VERSIÓN ACTUAL PARA ESTA TARJETA
+              const currentAuto = activeVersions[auto.id] || auto;
+              
+              return (
+                <div key={auto.id} className={`bg-white border flex flex-col transition-all relative ${compareIds.includes(auto.id) ? 'border-[#00BFFF] ring-4 ring-[#00BFFF]/10' : 'border-slate-100 shadow-sm'}`}>
+                  <div className="absolute -top-3 -left-3 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-10 shadow-lg">{idx + 1}</div>
+                  <div className="relative h-56 bg-slate-50 overflow-hidden">
+                    <img src={currentAuto.urlImagen} className="w-full h-full object-cover" alt={currentAuto.modelo} />
+                    <button onClick={() => toggleCompare(auto.id)} className={`absolute top-4 right-4 px-3 py-1 text-[8px] font-black border transition-all ${compareIds.includes(auto.id) ? 'bg-[#00BFFF] text-white border-[#00BFFF]' : 'bg-white/90 text-slate-400 border-slate-200 hover:text-[#0A1F33]'}`}>
+                      {compareIds.includes(auto.id) ? '✓ SELECCIONADO' : '+ COMPARAR'}
+                    </button>
                   </div>
-                  <button onClick={() => setExpandedId(expandedId === auto.id ? null : auto.id)} className="text-[9px] font-black text-[#00BFFF] text-left uppercase tracking-widest">+ Datos Técnicos</button>
-                  {expandedId === auto.id && (
-                    <div className="text-[10px] space-y-3 text-slate-500 animate-in slide-in-from-top-1 duration-300 pt-2">
-                      <div className="space-y-1">
-                        <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Seguridad</p>
-                        <p className="flex justify-between border-b pb-1"><span>ADAS:</span> <span className="font-bold text-[#0A1F33]">{auto.adas || 'Estándar'}</span></p>
-                        <p className="flex justify-between border-b pb-1"><span>Airbags:</span> <span className="font-bold text-[#0A1F33]">{auto.airbags || 'Consultar'}</span></p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Tecnología</p>
-                        <p className="flex justify-between border-b pb-1"><span>Pantalla:</span> <span className="font-bold text-[#0A1F33]">{auto.tamanhoPantalla || 'Consultar'}</span></p>
-                        <p className="flex justify-between border-b pb-1"><span>Cámaras:</span> <span className="font-bold text-[#0A1F33]">{auto.camaras || 'Retroceso'}</span></p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Capacidad</p>
-                        <p className="flex justify-between border-b pb-1"><span>Baulera:</span> <span className="font-bold text-[#0A1F33]">{auto.bauleraLitros ? `${auto.bauleraLitros} L` : 'Consultar'}</span></p>
-                        <p className="flex justify-between border-b pb-1"><span>Plazas:</span> <span className="font-bold text-[#0A1F33]">{auto.plazas || '5'}</span></p>
+                  
+                  <div className="p-10 flex-1 flex flex-col gap-6">
+                    {/* SELECTOR DE VERSIONES INTEGRADO */}
+                    <div className="space-y-4">
+                      <h4 className="font-black text-lg text-[#0A1F33] uppercase leading-tight">{currentAuto.marca} <br/> <span className="font-light text-slate-400">{currentAuto.modelo}</span></h4>
+                      
+                      <div className="relative group">
+                        <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-widest mb-1">Versión:</p>
+                        <div className="bg-slate-50 border border-slate-100 p-2 text-[10px] font-bold text-[#0A1F33] flex justify-between items-center cursor-pointer hover:border-[#00BFFF] transition-all">
+                          <span className="truncate pr-2">{currentAuto.version}</span>
+                          <span className="text-[#00BFFF]">▾</span>
+                        </div>
+                        {/* Dropdown al Hover */}
+                        <div className="absolute left-0 w-full bg-white border shadow-xl z-20 hidden group-hover:block max-h-40 overflow-y-auto">
+                          {auto.versiones?.map((v: any) => (
+                            <div 
+                              key={v.id} 
+                              onClick={() => setActiveVersions({ ...activeVersions, [auto.id]: v })}
+                              className={`p-2 text-[9px] border-b hover:bg-slate-50 cursor-pointer flex justify-between ${currentAuto.id === v.id ? 'bg-[#00BFFF]/5 text-[#00BFFF]' : 'text-slate-600'}`}
+                            >
+                              <span className="font-black uppercase">{v.version}</span>
+                              <span className="font-bold">${v.precioUsd?.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  )}
-                  <a href={`https://wa.me/595981123456?text=Me interesa el ${auto.marca} ${auto.modelo} del ranking Datacar.`} target="_blank" className="mt-auto block w-full py-4 bg-[#0A1F33] text-white text-center font-black text-[10px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all shadow-lg">Quiero Comprar</a>
+
+                    <div className="flex justify-between border-y py-4 text-sm font-black uppercase">
+                      <span className="text-[#00BFFF]">{currentAuto.match_percent}% Match</span>
+                      <span className="text-[#0A1F33]">${currentAuto.precioUsd?.toLocaleString()}</span>
+                    </div>
+                    
+                    <button onClick={() => setExpandedId(expandedId === auto.id ? null : auto.id)} className="text-[9px] font-black text-[#00BFFF] text-left uppercase tracking-widest">+ Datos Técnicos</button>
+                    
+                    {expandedId === auto.id && (
+                      <div className="text-[10px] space-y-3 text-slate-500 animate-in slide-in-from-top-1 duration-300 pt-2">
+                        <div className="space-y-1">
+                          <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Seguridad</p>
+                          <p className="flex justify-between border-b pb-1"><span>ADAS:</span> <span className="font-bold text-[#0A1F33]">{currentAuto.adas || 'Estándar'}</span></p>
+                          <p className="flex justify-between border-b pb-1"><span>Airbags:</span> <span className="font-bold text-[#0A1F33]">{currentAuto.airbags || 'Consultar'}</span></p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Tecnología</p>
+                          <p className="flex justify-between border-b pb-1"><span>Pantalla:</span> <span className="font-bold text-[#0A1F33]">{currentAuto.tamanhoPantalla || 'Consultar'}</span></p>
+                          <p className="flex justify-between border-b pb-1"><span>Cámaras:</span> <span className="font-bold text-[#0A1F33]">{currentAuto.camaras || 'Retroceso'}</span></p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-tighter">Capacidad</p>
+                          <p className="flex justify-between border-b pb-1"><span>Baulera:</span> <span className="font-bold text-[#0A1F33]">{currentAuto.bauleraLitros ? `${currentAuto.bauleraLitros} L` : 'Consultar'}</span></p>
+                          <p className="flex justify-between border-b pb-1"><span>Plazas:</span> <span className="font-bold text-[#0A1F33]">{currentAuto.plazas || '5'}</span></p>
+                        </div>
+                      </div>
+                    )}
+                    <a href={`https://wa.me/595981123456?text=Me interesa el ${currentAuto.marca} ${currentAuto.modelo} versión ${currentAuto.version} del ranking Datacar.`} target="_blank" className="mt-auto block w-full py-4 bg-[#0A1F33] text-white text-center font-black text-[10px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all shadow-lg">Quiero Comprar</a>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {compareIds.length >= 1 && (
