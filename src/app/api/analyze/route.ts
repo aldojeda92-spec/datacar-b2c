@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // --- FUNCIÓN TRADUCTORA (Evita que el código rompa si el dato no es array) ---
+    // --- FUNCIÓN TRADUCTORA ---
     const ensureArray = (val: any): string[] => {
       if (Array.isArray(val)) return val;
       if (typeof val === 'string' && val.trim() !== '') return [val];
@@ -64,7 +64,6 @@ export async function POST(req: Request) {
       conditions.push(or(...sTipos.map(t => ilike(catalogoMatriz.tipoCarroceria, `%${t}%`)))!);
     }
     
-    // Filtro de concesionarias solo si hay seleccionadas
     if (sConcesionarias.length > 0 && !sConcesionarias.includes('Todas')) {
       conditions.push(inArray(catalogoMatriz.concesionaria, sConcesionarias));
     }
@@ -102,8 +101,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // --- IA: GENERACIÓN DE DESTACADOS ---
-  // --- 3. IA: DESTACA SOBRE LA SELECCIÓN DE 10 (CON BLINDAJE) ---
+    // --- 3. IA: GENERACIÓN DE DESTACADOS (CORREGIDO) ---
     let veredictosIA: string[] = [];
     try {
       const prompt = {
@@ -112,7 +110,7 @@ export async function POST(req: Request) {
             text: `Eres un consultor automotriz en Paraguay. Analiza estos 10 autos para un cliente que busca: ${attrs.join(', ')}.
             Para CADA UNO, escribe un veredicto de 15 palabras resaltando sus ventajas técnicas. No los compares entre sí.
             Lista:
-            ${rankingUnico.map((a, i) => `${i+1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, baulera ${a.bauleraLitros}L`).join('\n')}`
+            ${finalTop.map((a, i) => `${i+1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, baulera ${a.bauleraLitros}L`).join('\n')}`
           }]
         }]
       };
@@ -125,35 +123,25 @@ export async function POST(req: Request) {
       
       const aiData = await aiRes.json();
 
-      // VALIDACIÓN CRÍTICA: ¿Gemini respondió correctamente?
       if (aiData.candidates && aiData.candidates[0] && aiData.candidates[0].content) {
         const rawText = aiData.candidates[0].content.parts[0].text;
         veredictosIA = rawText.split('\n').filter((l: string) => l.trim().length > 5);
       } else {
-        // Si Gemini devuelve error de API Key o similar, registramos el error y usamos fallback
-        console.error("Gemini API Error Detail:", JSON.stringify(aiData));
-        veredictosIA = new Array(rankingUnico.length).fill("Opción sólida por su configuración técnica y equipamiento.");
+        console.error("Error en respuesta de IA:", aiData);
+        veredictosIA = new Array(finalTop.length).fill("Excelente opción por su configuración técnica.");
       }
     } catch (e) {
-      console.error("Error en llamada fetch a IA:", e);
-      veredictosIA = new Array(rankingUnico.length).fill("Análisis técnico basado en especificaciones de catálogo.");
-    };
+      console.error("Error IA:", e);
+      veredictosIA = new Array(finalTop.length).fill("Análisis técnico basado en especificaciones.");
+    }
 
-      const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(prompt)
-      });
-      const aiData = await aiRes.json();
-      const rawText = aiData.candidates[0].content.parts[0].text;
-      veredictosIA = rawText.split('\n').filter((l: string) => l.trim().length > 5);
-    } catch (e) { console.error("Error IA:", e); }
-
+    // --- MAPEO FINAL DE RESULTADOS ---
     const top10 = await Promise.all(finalTop.map(async (auto, index) => {
       const vRaw = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo),
         orderBy: [catalogoMatriz.precioUsd]
       });
+      
       const versiones = vRaw.map(v => ({ ...v, match_percent: calculateMatch(v) }));
       const veredictoFinal = veredictosIA[index]?.replace(/^\d+[\.\)\s]*/, '').trim() || "Excelente equilibrio técnico.";
 
@@ -166,6 +154,7 @@ export async function POST(req: Request) {
     }));
 
     return NextResponse.json({ success: true, top10 });
+
   } catch (error: any) {
     console.error("CRITICAL ERROR:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
