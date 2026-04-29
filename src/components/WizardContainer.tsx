@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { saveLeadAction, logComparisonAction } from '@/app/actions';
 
 interface IAAuto {
@@ -32,7 +32,7 @@ interface IAAuto {
   techoPanoramico?: string;
   conectividad?: string;
   concesionaria?: string;
-  veredicto: string; // AGREGADO PARA IA
+  veredicto: string; 
   versiones: any[];
 }
 
@@ -44,17 +44,32 @@ export default function WizardContainer() {
   const [top10, setTop10] = useState<IAAuto[]>([]);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [openFilter, setOpenFilter] = useState<string | null>(null);
   
-  // ESTADO PARA MANEJAR LA VERSIÓN ACTIVA DE CADA TARJETA
   const [activeVersions, setActiveVersions] = useState<Record<string, IAAuto>>({});
 
   const [formData, setFormData] = useState({
     nombre: '', celular: '', email: '', presupuestoMin: 20000, presupuestoMax: 50000,
-    atributos: [] as string[], motorizacion: 'Todos', tipoVehiculo: 'SUV',
-    origen: 'Todos', concesionaria: 'Todas', notas: ''
+    atributos: [] as string[], 
+    motorizacion: [] as string[], 
+    tipoVehiculo: [] as string[],
+    origen: [] as string[], 
+    concesionaria: [] as string[], 
+    notas: ''
   });
 
   const isReady = formData.nombre && formData.celular && formData.atributos.length === 3;
+
+  const toggleArrayItem = (key: 'motorizacion' | 'tipoVehiculo' | 'origen' | 'concesionaria', value: string) => {
+    setFormData(prev => {
+      const current = prev[key] as string[];
+      const exists = current.includes(value);
+      return {
+        ...prev,
+        [key]: exists ? current.filter(i => i !== value) : [...current, value]
+      };
+    });
+  };
 
   const handleMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = Math.min(Number(e.target.value), formData.presupuestoMax - 2000);
@@ -98,26 +113,44 @@ export default function WizardContainer() {
   const handleOpenComparison = async () => {
     const selected = top10.filter(a => compareIds.includes(a.id));
     const nombres = selected.map(a => `${a.marca} ${a.modelo}`).join(' vs ');
-    
-    // 1. Buscamos el ID en el estado o en el disco duro del navegador
     const leadIdToUse = currentLeadId || localStorage.getItem('datacar_lead_id');
-
     if (leadIdToUse && compareIds.length >= 2) {
-      console.log("Enviando datos B2B para el Lead:", leadIdToUse);
-      
-      // Ejecutamos la acción de guardado en Neon
-      await logComparisonAction({ 
-        leadId: leadIdToUse, 
-        vIds: compareIds, 
-        nombres: nombres 
-      });
-    } else {
-      console.warn("No se pudo guardar B2B: falta leadId o hay pocos autos seleccionados.");
+      await logComparisonAction({ leadId: leadIdToUse, vIds: compareIds, nombres: nombres });
     }
-
     setShowComparison(true);
     window.scrollTo(0, 0);
   };
+
+  // UI Component para los Checklist Desplegables
+  const MultiSelect = ({ label, items, value, storeKey }: { label: string, items: string[], value: string[], storeKey: any }) => (
+    <div className="space-y-1 relative">
+      <label className="text-[9px] font-black uppercase text-slate-400">{label}</label>
+      <div 
+        onClick={() => setOpenFilter(openFilter === label ? null : label)}
+        className="w-full p-3 bg-slate-50 border-b-2 text-sm cursor-pointer flex justify-between items-center border-slate-100 hover:border-[#0A1F33] transition-all"
+      >
+        <span className="truncate pr-4 font-medium text-[#0A1F33]">
+          {value.length > 0 ? value.join(', ') : 'Todos / Cualquier'}
+        </span>
+        <span className="text-[#00BFFF] text-[10px]">{openFilter === label ? '▲' : '▼'}</span>
+      </div>
+      {openFilter === label && (
+        <div className="absolute z-50 w-full bg-white border shadow-2xl max-h-60 overflow-y-auto p-2 animate-in fade-in zoom-in duration-200">
+          {items.map(item => (
+            <label key={item} className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer rounded transition-colors">
+              <input 
+                type="checkbox" 
+                checked={value.includes(item)} 
+                onChange={() => toggleArrayItem(storeKey, item)}
+                className="w-4 h-4 accent-[#00BFFF] rounded border-slate-300"
+              />
+              <span className="text-xs font-bold text-[#0A1F33] uppercase">{item}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   if (isAnalyzing) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-white">
@@ -245,21 +278,36 @@ export default function WizardContainer() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <select value={formData.motorizacion} onChange={e => setFormData({...formData, motorizacion: e.target.value})} className="w-full p-3 bg-slate-50 border-b-2 text-sm outline-none font-medium">
-                {['Todos', 'PHEV', 'HEV', 'EV', 'Diesel', 'Flex', 'Nafta'].map(x => <option key={x} value={x}>{x}</option>)}
-              </select>
-              <select value={formData.tipoVehiculo} onChange={e => setFormData({...formData, tipoVehiculo: e.target.value})} className="w-full p-3 bg-slate-50 border-b-2 text-sm outline-none font-medium">
-                {['SUV', 'Sedan', 'Hatchback', 'Pickup'].map(x => <option key={x} value={x}>{x}</option>)}
-              </select>
-              <select value={formData.origen} onChange={e => setFormData({...formData, origen: e.target.value})} className="p-3 bg-slate-50 border-b-2 text-sm outline-none font-medium">
-                {['Todos', 'Solo Coreanos', 'Solo Japoneses', 'Solo Europeos', 'Solo Chinos'].map(x => <option key={x} value={x}>{x}</option>)}
-              </select>
-              <select value={formData.concesionaria} onChange={e => setFormData({...formData, concesionaria: e.target.value})} className="p-3 bg-slate-50 border-b-2 text-sm outline-none font-medium">
-                {['Todas', 'Garden', 'Automotor', 'Santa Rosa', 'Chacomer', 'Toyotoshi', 'Condor', 'Gorostiaga'].map(x => <option key={x} value={x}>{x}</option>)}
-              </select>
+              <MultiSelect 
+                label="Motorización" 
+                items={['PHEV', 'HEV', 'EV', 'Diesel', 'Flex', 'Nafta']} 
+                value={formData.motorizacion} 
+                storeKey="motorizacion"
+              />
+              <MultiSelect 
+                label="Tipo de Vehículo" 
+                items={['SUV', 'Sedan', 'Hatchback', 'Pickup']} 
+                value={formData.tipoVehiculo} 
+                storeKey="tipoVehiculo"
+              />
+              <MultiSelect 
+                label="Origen de Marca" 
+                items={['Solo Coreanos', 'Solo Japoneses', 'Solo Europeos', 'Solo Chinos']} 
+                value={formData.origen} 
+                storeKey="origen"
+              />
+              <MultiSelect 
+                label="Concesionaria" 
+                items={['Garden', 'Automotor', 'Santa Rosa', 'Chacomer', 'Toyotoshi', 'Condor', 'Gorostiaga']} 
+                value={formData.concesionaria} 
+                storeKey="concesionaria"
+              />
             </div>
 
-            <textarea value={formData.notas} onChange={e => setFormData({...formData, notas: e.target.value})} placeholder="Notas adicionales..." className="w-full p-4 bg-slate-50 border-b-2 text-sm min-h-[100px] outline-none font-medium" />
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase text-slate-400">Notas Adicionales</label>
+              <textarea value={formData.notas} onChange={e => setFormData({...formData, notas: e.target.value})} placeholder="Ej: Busco que tenga buen valor de reventa..." className="w-full p-4 bg-slate-50 border-b-2 text-sm min-h-[100px] outline-none font-medium" />
+            </div>
 
             <button disabled={!isReady} onClick={handleExecute} className="w-full py-6 bg-[#0A1F33] text-white font-montserrat font-black text-xs uppercase tracking-[5px] hover:bg-[#00BFFF] transition-all disabled:opacity-20 shadow-xl">Generar Análisis Estratégico →</button>
           </div>
@@ -268,20 +316,20 @@ export default function WizardContainer() {
 
       {step === 2 && (
         <div className="max-w-[1700px] mx-auto p-10 pb-40 animate-in fade-in duration-1000 space-y-12">
-          
           <div className="bg-[#0A1F33] p-12 text-white border-l-8 border-[#00BFFF] shadow-2xl">
             <h2 className="font-montserrat font-black text-2xl uppercase tracking-tighter">
               {formData.nombre.split(' ')[0]}, busca un auto con {formData.atributos.join(', ')}.
             </h2>
             <p className="mt-4 text-slate-400 font-medium text-sm uppercase tracking-widest underline decoration-[#00BFFF] underline-offset-8">
-              Inversión: ${formData.presupuestoMin.toLocaleString()} – ${formData.presupuestoMax.toLocaleString()} | {formData.origen} | {formData.motorizacion}
+              Inversión: ${formData.presupuestoMin.toLocaleString()} – ${formData.presupuestoMax.toLocaleString()} | 
+              Origen: {formData.origen.length > 0 ? formData.origen.join(', ') : 'Todos'} | 
+              Motor: {formData.motorizacion.length > 0 ? formData.motorizacion.join(', ') : 'Cualquiera'}
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-10">
             {top10.map((auto, idx) => {
               const currentAuto = activeVersions[auto.id] || auto;
-              
               return (
                 <div key={auto.id} className={`bg-white border flex flex-col transition-all relative ${compareIds.includes(auto.id) ? 'border-[#00BFFF] ring-4 ring-[#00BFFF]/10' : 'border-slate-100 shadow-sm'}`}>
                   <div className="absolute -top-3 -left-3 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-10 shadow-lg">{idx + 1}</div>
@@ -292,7 +340,6 @@ export default function WizardContainer() {
                     </button>
                   </div>
 
-                  {/* AGREGADO: CÁPSULA DE VEREDICTO IA */}
                   <div className="px-10 -mt-6 mb-2 relative z-10">
                     <div className="bg-slate-50 border-l-2 border-[#00BFFF] p-3 rounded-r-lg shadow-sm">
                       <p className="text-[10px] leading-relaxed text-slate-600 italic">
@@ -305,7 +352,6 @@ export default function WizardContainer() {
                   <div className="p-10 pt-4 flex-1 flex flex-col gap-6">
                     <div className="space-y-4">
                       <h4 className="font-black text-lg text-[#0A1F33] uppercase leading-tight">{currentAuto.marca} <br/> <span className="font-light text-slate-400">{currentAuto.modelo}</span></h4>
-                      
                       <div className="relative group">
                         <p className="text-[8px] font-black text-[#00BFFF] uppercase tracking-widest mb-1">Versión:</p>
                         <div className="bg-slate-50 border border-slate-100 p-2 text-[10px] font-bold text-[#0A1F33] flex justify-between items-center cursor-pointer hover:border-[#00BFFF] transition-all">
@@ -314,11 +360,7 @@ export default function WizardContainer() {
                         </div>
                         <div className="absolute left-0 w-full bg-white border shadow-xl z-20 hidden group-hover:block max-h-40 overflow-y-auto">
                           {auto.versiones?.map((v: any) => (
-                            <div 
-                              key={v.id} 
-                              onClick={() => setActiveVersions({ ...activeVersions, [auto.id]: v })}
-                              className={`p-2 text-[9px] border-b hover:bg-slate-50 cursor-pointer flex justify-between ${currentAuto.id === v.id ? 'bg-[#00BFFF]/5 text-[#00BFFF]' : 'text-slate-600'}`}
-                            >
+                            <div key={v.id} onClick={() => setActiveVersions({ ...activeVersions, [auto.id]: v })} className={`p-2 text-[9px] border-b hover:bg-slate-50 cursor-pointer flex justify-between ${currentAuto.id === v.id ? 'bg-[#00BFFF]/5 text-[#00BFFF]' : 'text-slate-600'}`}>
                               <span className="font-black uppercase">{v.version}</span>
                               <span className="font-bold">${v.precioUsd?.toLocaleString()}</span>
                             </div>
