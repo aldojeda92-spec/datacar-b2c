@@ -11,12 +11,18 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-  // 1. PREPARACIÓN DE FILTROS (ARRAYS) - Corregido con "as unknown"
-    const attrs = (leadData.atributos as unknown as string[]) || [];
-    const sMotorizaciones = (leadData.motorizacion as unknown as string[]) || [];
-    const sTipos = (leadData.tipoVehiculo as unknown as string[]) || [];
-    const sOrigenes = (leadData.origen as unknown as string[]) || [];
-    const sConcesionarias = (leadData.concesionariaPreferencia as unknown as string[]) || [];
+    // --- FUNCIÓN TRADUCTORA (Evita que el código rompa si el dato no es array) ---
+    const ensureArray = (val: any): string[] => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string' && val.trim() !== '') return [val];
+      return [];
+    };
+
+    const attrs = ensureArray(leadData.atributos);
+    const sMotorizaciones = ensureArray(leadData.motorizacion);
+    const sTipos = ensureArray(leadData.tipoVehiculo);
+    const sOrigenes = ensureArray(leadData.origen);
+    const sConcesionarias = ensureArray(leadData.concesionariaPreferencia);
 
     const quiereSeguridad = attrs.includes('Seguridad');
     const quiereEspacio = attrs.includes('Espacio');
@@ -30,41 +36,25 @@ export async function POST(req: Request) {
       'Solo Europeos': 'Europa',
     };
 
-    // Convertimos los orígenes seleccionados a sus valores de base de datos
     const origenesDB = sOrigenes.map(o => mappingOrigen[o]).filter(Boolean);
 
-    // --- FUNCIÓN DE SCORING INTERNO (Para Versiones) ---
+    // --- SCORING DINÁMICO ---
     const calculateMatch = (auto: any) => {
       let score = 0;
-      
-      // Puntaje por Origen (si coincide con alguno de la lista)
       if (origenesDB.length === 0 || origenesDB.some(o => auto.origenMarca?.includes(o))) score += 3000;
-      
-      // Puntaje por Motorización
       if (sMotorizaciones.length === 0 || sMotorizaciones.some(m => auto.combustible?.includes(m))) score += 2000;
       
       if (quiereSeguridad) {
         const numAirbags = parseInt(auto.airbags) || 0;
         score += (numAirbags * 500);
         if (auto.adas?.includes('Full')) score += 2000;
-        else if (auto.adas?.includes('Intermedio')) score += 1000;
       }
-      if (quiereEspacio) {
-        score += ((auto.bauleraLitros || 0) * 5) + ((auto.despejeSuelo || 0) * 2);
-      }
-      if (quiereTecno) {
-        if (auto.tamanhoPantalla?.includes('10') || auto.tamanhoPantalla?.includes('12')) score += 1500;
-        if (auto.conectividad?.includes('Inalámbrica')) score += 1000;
-      }
-      if (quiereEficiencia && (auto.combustible?.includes('Hybrid') || auto.combustible?.includes('EV'))) {
-        score += 4000;
-      }
-      // DIVISOR CALIBRADO A 8500 para mejores %
+      if (quiereEspacio) score += ((auto.bauleraLitros || 0) * 5) + ((auto.despejeSuelo || 0) * 2);
+      
       return Math.min(Math.round((score / 8500) * 100), 99);
     };
 
-    // 2. FILTRADO DINÁMICO SQL
-    // Construimos las condiciones WHERE según si hay selecciones o no
+    // --- FILTROS SQL SEGUROS ---
     const conditions = [
       gte(catalogoMatriz.precioUsd, leadData.presupuestoMin),
       lte(catalogoMatriz.precioUsd, leadData.presupuestoMax),
@@ -73,7 +63,9 @@ export async function POST(req: Request) {
     if (sTipos.length > 0) {
       conditions.push(or(...sTipos.map(t => ilike(catalogoMatriz.tipoCarroceria, `%${t}%`)))!);
     }
-    if (sConcesionarias.length > 0) {
+    
+    // Filtro de concesionarias solo si hay seleccionadas
+    if (sConcesionarias.length > 0 && !sConcesionarias.includes('Todas')) {
       conditions.push(inArray(catalogoMatriz.concesionaria, sConcesionarias));
     }
 
@@ -91,50 +83,41 @@ export async function POST(req: Request) {
       despejeSuelo: catalogoMatriz.despejeSuelo,
       adas: catalogoMatriz.adas,
       airbags: catalogoMatriz.airbags,
-      tamanhoPantalla: catalogoMatriz.tamanhoPantalla,
-      conectividad: catalogoMatriz.conectividad,
-      score: sql<number>`
-        (CASE WHEN ${origenesDB.length === 0} OR ${catalogoMatriz.origenMarca} ILIKE ANY(ARRAY[${origenesDB.length > 0 ? origenesDB.map(o => '%' + o + '%') : ['%']}]) THEN 3000 ELSE 0 END) +
-        (CASE WHEN ${sMotorizaciones.length === 0} OR ${catalogoMatriz.combustible} ILIKE ANY(ARRAY[${sMotorizaciones.length > 0 ? sMotorizaciones.map(m => '%' + m + '%') : ['%']}]) THEN 2000 ELSE 0 END) +
-        (CASE WHEN ${quiereSeguridad} = true THEN 
-          (CASE WHEN ${catalogoMatriz.airbags} ~ '^[0-9]+$' THEN CAST(${catalogoMatriz.airbags} AS INTEGER) ELSE 0 END * 500) + 
-          (CASE WHEN ${catalogoMatriz.adas} ILIKE '%Full%' THEN 2000 WHEN ${catalogoMatriz.adas} ILIKE '%Intermedio%' THEN 1000 ELSE 0 END)
-        ELSE 0 END) +
-        (CASE WHEN ${quiereEspacio} = true THEN (COALESCE(${catalogoMatriz.bauleraLitros}, 0) * 5) + (COALESCE(${catalogoMatriz.despejeSuelo}, 0) * 2) ELSE 0 END)
-      `.as('score')
     })
     .from(catalogoMatriz)
     .where(and(...conditions))
-    .orderBy(sql`score DESC`, catalogoMatriz.precioUsd)
     .limit(100);
 
+    // --- ORDENAMIENTO Y RANKING ---
+    const rankingPrevio = candidatos
+      .map(c => ({ ...c, internalScore: calculateMatch(c) }))
+      .sort((a, b) => b.internalScore - a.internalScore);
+
     const vistos = new Set();
-    const rankingPrevio = [];
-    for (const auto of candidatos) {
-      if (!vistos.has(auto.modelo) && rankingPrevio.length < 10) {
+    const finalTop = [];
+    for (const auto of rankingPrevio) {
+      if (!vistos.has(auto.modelo) && finalTop.length < 10) {
         vistos.add(auto.modelo);
-        rankingPrevio.push(auto);
+        finalTop.push(auto);
       }
     }
 
-    // 3. IA: GENERACIÓN DE DESTACADOS
+    // --- IA: GENERACIÓN DE DESTACADOS ---
     let veredictosIA: string[] = [];
     try {
       const prompt = {
         contents: [{
           parts: [{
-            text: `Eres un experto automotriz en Paraguay. Analiza estos 10 autos para un cliente que prioriza: ${attrs.join(', ')}.
-            Sus preferencias adicionales son: Origen(${sOrigenes.join(', ')}), Motores(${sMotorizaciones.join(', ')}).
-            Escribe una frase de máximo 15 palabras para CADA UNO resaltando sus virtudes según esos datos. 
-            No los compares entre sí. No uses negritas ni asteriscos. Devuelve solo las frases.
-
+            text: `Eres un experto automotriz en Paraguay. Analiza estos 10 autos para un cliente que busca: ${attrs.join(', ')}.
+            Escribe una frase de máximo 15 palabras para CADA UNO resaltando virtudes. No compares. Solo frases directas.
+            
             Lista:
-            ${rankingPrevio.map((a, i) => `${i+1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, baulera ${a.bauleraLitros}L, ADAS: ${a.adas}`).join('\n')}`
+            ${finalTop.map((a, i) => `${i+1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, baulera ${a.bauleraLitros}L`).join('\n')}`
           }]
         }]
       };
 
-      const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
+      const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(prompt)
@@ -144,13 +127,13 @@ export async function POST(req: Request) {
       veredictosIA = rawText.split('\n').filter((l: string) => l.trim().length > 5);
     } catch (e) { console.error("Error IA:", e); }
 
-    const top10 = await Promise.all(rankingPrevio.map(async (auto, index) => {
+    const top10 = await Promise.all(finalTop.map(async (auto, index) => {
       const vRaw = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo),
         orderBy: [catalogoMatriz.precioUsd]
       });
       const versiones = vRaw.map(v => ({ ...v, match_percent: calculateMatch(v) }));
-      const veredictoFinal = veredictosIA[index]?.replace(/^\d+[\.\)\s]*/, '').trim() || "Excelente equilibrio técnico para tu perfil.";
+      const veredictoFinal = veredictosIA[index]?.replace(/^\d+[\.\)\s]*/, '').trim() || "Excelente equilibrio técnico.";
 
       return { 
         ...auto, 
@@ -162,6 +145,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, top10 });
   } catch (error: any) {
+    console.error("CRITICAL ERROR:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
