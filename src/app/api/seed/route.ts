@@ -10,10 +10,11 @@ export const maxDuration = 60;
 export async function GET() {
   try {
     const results: any[] = [];
-    const csvPath = path.join(process.cwd(), 'matriz2.csv');
+    // Asegúrate de que el archivo en la raíz se llame exactamente matriz3.csv
+    const csvPath = path.join(process.cwd(), 'matriz3.csv');
     
     if (!fs.existsSync(csvPath)) {
-      return NextResponse.json({ error: "No se encuentra matriz2.csv en la raiz" }, { status: 404 });
+      return NextResponse.json({ error: "No se encuentra matriz3.csv en la raíz del proyecto" }, { status: 404 });
     }
 
     const promise = new Promise((resolve, reject) => {
@@ -26,10 +27,10 @@ export async function GET() {
 
     await promise;
 
-    // Limpiamos la tabla antes de cargar
+    // Limpiamos la tabla para que no haya duplicados
     await db.delete(catalogoMatriz);
 
-  const toInsert = results.map((row) => ({
+    const toInsert = results.map((row) => ({
       concesionaria: row['concesionaria'],
       marca: row['marca'],
       modelo: row['modelo'],
@@ -52,24 +53,24 @@ export async function GET() {
       tamanhoPantalla: row['tamanho_pantalla'],
       conectividad: row['conectividad'],
       camaras: row['camaras'],
+      garantia: row['garantia'],
       origen: row['origen'],
       origenMarca: row['origen_marca'],
       urlImagen: row['url_imagen'],
-      garantia: row['garantia'],
       subsegmento: row['subsegmento'],
       airbags: row['airbags'],
     }));
-    // Insertar en bloques de 50 para no saturar Neon
+
+    // Insertar en bloques para seguridad de Neon
     for (let i = 0; i < toInsert.length; i += 50) {
       await db.insert(catalogoMatriz).values(toInsert.slice(i, i + 50));
     }
 
     return NextResponse.json({ 
       success: true, 
-      message: `¡Éxito! Se cargaron ${toInsert.length} vehículos en la base de datos.` 
+      message: `¡Base de Datos cargada! Se procesaron ${toInsert.length} vehículos de Matriz3.csv.` 
     });
   } catch (error: any) {
-    console.error(error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
