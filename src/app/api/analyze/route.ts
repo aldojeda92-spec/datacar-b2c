@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { catalogoMatriz, leads } from '@/lib/schema';
-import { eq, and, gte, lte, ilike, sql, inArray, or } from 'drizzle-orm';
+import { eq, and, gte, lte, ilike, sql, or } from 'drizzle-orm';
 
 export const maxDuration = 60;
 
@@ -11,8 +11,9 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // --- FUNCIÓN TRADUCTORA ---
+    // 1. NORMALIZACIÓN DE FILTROS (Manejo de arrays/checklists)
     const ensureArray = (val: any): string[] => {
+      if (!val) return [];
       if (Array.isArray(val)) return val;
       if (typeof val === 'string' && val.trim() !== '') return [val];
       return [];
@@ -26,8 +27,6 @@ export async function POST(req: Request) {
 
     const quiereSeguridad = attrs.includes('Seguridad');
     const quiereEspacio = attrs.includes('Espacio');
-    const quiereTecno = attrs.includes('Tecnología');
-    const quiereEficiencia = attrs.includes('Eficiencia');
 
     const mappingOrigen: Record<string, string> = {
       'Solo Chinos': 'China',
@@ -35,39 +34,9 @@ export async function POST(req: Request) {
       'Solo Coreanos': 'Corea',
       'Solo Europeos': 'Europa',
     };
+    const origenesDB = sOrigenes.map(o => mappingOrigen[o] || o).filter(Boolean);
 
-    const origenesDB = sOrigenes.map(o => mappingOrigen[o]).filter(Boolean);
-
-    // --- SCORING DINÁMICO ---
-    const calculateMatch = (auto: any) => {
-      let score = 0;
-      if (origenesDB.length === 0 || origenesDB.some(o => auto.origenMarca?.includes(o))) score += 3000;
-      if (sMotorizaciones.length === 0 || sMotorizaciones.some(m => auto.combustible?.includes(m))) score += 2000;
-      
-      if (quiereSeguridad) {
-        const numAirbags = parseInt(auto.airbags) || 0;
-        score += (numAirbags * 500);
-        if (auto.adas?.includes('Full')) score += 2000;
-      }
-      if (quiereEspacio) score += ((auto.bauleraLitros || 0) * 5) + ((auto.despejeSuelo || 0) * 2);
-      
-      return Math.min(Math.round((score / 8500) * 100), 99);
-    };
-
-    // --- FILTROS SQL SEGUROS ---
-    const conditions = [
-      gte(catalogoMatriz.precioUsd, leadData.presupuestoMin),
-      lte(catalogoMatriz.precioUsd, leadData.presupuestoMax),
-    ];
-
-    if (sTipos.length > 0) {
-      conditions.push(or(...sTipos.map(t => ilike(catalogoMatriz.tipoCarroceria, `%${t}%`)))!);
-    }
-    
-    if (sConcesionarias.length > 0 && !sConcesionarias.includes('Todas')) {
-      conditions.push(inArray(catalogoMatriz.concesionaria, sConcesionarias));
-    }
-
+    // 2. SELECCIÓN POR PESOS (Filtro Inteligente)
     const candidatos = await db.select({
       id: catalogoMatriz.id,
       marca: catalogoMatriz.marca,
@@ -80,70 +49,95 @@ export async function POST(req: Request) {
       urlImagen: catalogoMatriz.urlImagen,
       bauleraLitros: catalogoMatriz.bauleraLitros,
       despejeSuelo: catalogoMatriz.despejeSuelo,
-      adas: catalogoMatriz.adas,
       airbags: catalogoMatriz.airbags,
+      adas: catalogoMatriz.adas,
+      score: sql<number>`
+        -- Prioridad por Tipo de Carrocería (4000 pts)
+        (CASE WHEN ${sTipos.length > 0} AND ${catalogoMatriz.tipoCarroceria} ILIKE ANY(ARRAY[${sTipos.length > 0 ? sTipos.map(t => '%' + t + '%') : ['%']}]) THEN 4000 ELSE 0 END) +
+        
+        -- Prioridad por Origen (3000 pts)
+        (CASE WHEN ${origenesDB.length > 0} AND ${catalogoMatriz.origenMarca} ILIKE ANY(ARRAY[${origenesDB.length > 0 ? origenesDB.map(o => '%' + o + '%') : ['%']}]) THEN 3000 ELSE 0 END) +
+        
+        -- Prioridad por Motorización (2000 pts)
+        (CASE WHEN ${sMotorizaciones.length > 0} AND ${catalogoMatriz.combustible} ILIKE ANY(ARRAY[${sMotorizaciones.length > 0 ? sMotorizaciones.map(m => '%' + m + '%') : ['%']}]) THEN 2000 ELSE 0 END) +
+
+        -- Seguridad (Airbags * 500 + ADAS)
+        (CASE WHEN ${quiereSeguridad} = true THEN 
+          (CASE WHEN ${catalogoMatriz.airbags} ~ '^[0-9]+$' THEN CAST(${catalogoMatriz.airbags} AS INTEGER) ELSE 0 END * 500) + 
+          (CASE WHEN ${catalogoMatriz.adas} ILIKE '%Full%' THEN 2000 WHEN ${catalogoMatriz.adas} ILIKE '%Intermedio%' THEN 1000 ELSE 0 END)
+        ELSE 0 END) +
+
+        -- Espacio (Baulera * 5 + Despeje * 2)
+        (CASE WHEN ${quiereEspacio} = true THEN (COALESCE(${catalogoMatriz.bauleraLitros}, 0) * 5) + (COALESCE(${catalogoMatriz.despejeSuelo}, 0) * 2) ELSE 0 END)
+      `.as('score')
     })
     .from(catalogoMatriz)
-    .where(and(...conditions))
+    .where(and(
+      gte(catalogoMatriz.precioUsd, leadData.presupuestoMin),
+      lte(catalogoMatriz.precioUsd, leadData.presupuestoMax)
+    ))
+    .orderBy(sql`score DESC`, catalogoMatriz.precioUsd)
     .limit(100);
 
-    // --- ORDENAMIENTO Y RANKING ---
-    const rankingPrevio = candidatos
-      .map(c => ({ ...c, internalScore: calculateMatch(c) }))
-      .sort((a, b) => b.internalScore - a.internalScore);
-
+    // 3. AGRUPACIÓN POR MODELO (Top 10 Únicos)
     const vistos = new Set();
     const finalTop = [];
-    for (const auto of rankingPrevio) {
+    for (const auto of candidatos) {
       if (!vistos.has(auto.modelo) && finalTop.length < 10) {
         vistos.add(auto.modelo);
         finalTop.push(auto);
       }
     }
 
-    // --- 3. IA: GENERACIÓN DE DESTACADOS (CORREGIDO) ---
+    // 4. IA: ANÁLISIS TÉCNICO SOBRE LOS 10 RESULTADOS
     let veredictosIA: string[] = [];
     try {
       const prompt = {
         contents: [{
           parts: [{
             text: `Eres un consultor automotriz en Paraguay. Analiza estos 10 autos para un cliente que busca: ${attrs.join(', ')}.
-            Para CADA UNO, escribe un veredicto de 15 palabras resaltando sus ventajas técnicas. No los compares entre sí.
+            Para CADA UNO, escribe un veredicto de 15 palabras resaltando sus ventajas técnicas. No los compares entre sí. No uses negritas ni listas.
             Lista:
             ${finalTop.map((a, i) => `${i+1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, baulera ${a.bauleraLitros}L`).join('\n')}`
           }]
         }]
       };
 
-      const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
+      const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(prompt)
       });
       
       const aiData = await aiRes.json();
-
-      if (aiData.candidates && aiData.candidates[0] && aiData.candidates[0].content) {
-        const rawText = aiData.candidates[0].content.parts[0].text;
-        veredictosIA = rawText.split('\n').filter((l: string) => l.trim().length > 5);
-      } else {
-        console.error("Error en respuesta de IA:", aiData);
-        veredictosIA = new Array(finalTop.length).fill("Excelente opción por su configuración técnica.");
+      if (aiData.candidates?.[0]?.content?.parts?.[0]?.text) {
+        veredictosIA = aiData.candidates[0].content.parts[0].text.split('\n').filter((l: string) => l.trim().length > 5);
       }
     } catch (e) {
       console.error("Error IA:", e);
-      veredictosIA = new Array(finalTop.length).fill("Análisis técnico basado en especificaciones.");
     }
 
-    // --- MAPEO FINAL DE RESULTADOS ---
+    // 5. CÁLCULO DE MATCH % (Basado en tu lógica de pesos original)
+    const calculateMatch = (v: any) => {
+      let s = 0;
+      if (origenesDB.some(o => v.origenMarca?.includes(o))) s += 3000;
+      if (sMotorizaciones.some(m => v.combustible?.includes(m))) s += 2000;
+      if (quiereSeguridad) {
+        s += (parseInt(v.airbags) || 0) * 500;
+        if (v.adas?.includes('Full')) s += 2000;
+      }
+      if (quiereEspacio) s += ((v.bauleraLitros || 0) * 5) + ((v.despejeSuelo || 0) * 2);
+      return Math.min(Math.round((s / 12000) * 100), 99);
+    };
+
+    // 6. MAPEO FINAL DE RESULTADOS
     const top10 = await Promise.all(finalTop.map(async (auto, index) => {
       const vRaw = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo),
         orderBy: [catalogoMatriz.precioUsd]
       });
-      
       const versiones = vRaw.map(v => ({ ...v, match_percent: calculateMatch(v) }));
-      const veredictoFinal = veredictosIA[index]?.replace(/^\d+[\.\)\s]*/, '').trim() || "Excelente equilibrio técnico.";
+      const veredictoFinal = veredictosIA[index]?.replace(/^\d+[\.\)\s]*/, '').trim() || "Excelente equilibrio técnico para tu perfil.";
 
       return { 
         ...auto, 
