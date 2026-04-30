@@ -11,14 +11,14 @@ export async function POST(req: Request) {
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // 1. NORMALIZACIÓN DE ENTRADAS
     const ensureArray = (val: any): string[] => {
       if (!val) return [];
-      if (Array.isArray(val)) return val;
-      if (typeof val === 'string' && val.trim() !== '') return [val];
+      if (Array.isArray(val)) return val.map(v => v.toLowerCase().trim());
+      if (typeof val === 'string' && val.trim() !== '') return [val.toLowerCase().trim()];
       return [];
     };
 
+    // 1. NORMALIZACIÓN (Todo a minúsculas para comparar fácil)
     const attrs = ensureArray(leadData.atributos);
     const sMotorizaciones = ensureArray(leadData.motorizacion);
     const sTipos = ensureArray(leadData.tipoVehiculo);
@@ -26,49 +26,45 @@ export async function POST(req: Request) {
     const sConcesionarias = ensureArray(leadData.concesionariaPreferencia);
 
     const mappingOrigen: Record<string, string> = {
-      'Solo Chinos': 'China',
-      'Solo Japoneses': 'Japón',
-      'Solo Coreanos': 'Corea',
-      'Solo Europeos': 'Europa',
+      'solo chinos': 'china',
+      'solo japoneses': 'japón',
+      'solo coreanos': 'corea',
+      'solo europeos': 'europa',
     };
-    const origenesDB = sOrigenes.map(o => mappingOrigen[o] || o).filter(Boolean);
+    const origenesDB = sOrigenes.map(o => mappingOrigen[o] || o);
 
-    // 2. CONSULTA BASE (SEGURA Y RÁPIDA)
+    // 2. CONSULTA BASE POR PRECIO
     const universoAutos = await db.select().from(catalogoMatriz).where(and(
       gte(catalogoMatriz.precioUsd, leadData.presupuestoMin),
       lte(catalogoMatriz.precioUsd, leadData.presupuestoMax)
     ));
 
-    // 3. REGLA DE ORO: SCORING DE JERARQUÍA (PROCESADO EN JS)
+    // 3. SCORING DE JERARQUÍA (REGLA DE ORO)
     const rankingOrdenado = universoAutos.map(auto => {
       let score = 0;
+      const carroceriaAuto = (auto.tipoCarroceria || "").toLowerCase();
+      const combustibleAuto = (auto.combustible || "").toLowerCase();
+      const origenAuto = (auto.origenMarca || "").toLowerCase();
 
-      // SUPER PRIORIDAD: CARROCERÍA (50.000 pts)
-      const matchesTipo = sTipos.length === 0 || sTipos.some(t => auto.tipoCarroceria?.toLowerCase().includes(t.toLowerCase()));
-      if (matchesTipo && sTipos.length > 0) score += 50000;
+      // REGLA DE ORO: Carrocería (50.000 pts) - Uso .includes para mayor flexibilidad
+      if (sTipos.length > 0 && sTipos.some(t => carroceriaAuto.includes(t))) score += 50000;
+      
+      // Motorización (20.000 pts)
+      if (sMotorizaciones.length > 0 && sMotorizaciones.some(m => combustibleAuto.includes(m))) score += 20000;
+      
+      // Origen (15.000 pts)
+      if (origenesDB.length > 0 && origenesDB.some(o => origenAuto.includes(o))) score += 15000;
 
-      // PRIORIDAD ALTA: MOTORIZACIÓN (20.000 pts)
-      const matchesMotor = sMotorizaciones.length === 0 || sMotorizaciones.some(m => auto.combustible?.toLowerCase().includes(m.toLowerCase()));
-      if (matchesMotor && sMotorizaciones.length > 0) score += 20000;
-
-      // PRIORIDAD MEDIA: ORIGEN (15.000 pts)
-      const matchesOrigen = origenesDB.length === 0 || origenesDB.some(o => auto.origenMarca?.toLowerCase().includes(o.toLowerCase()));
-      if (matchesOrigen && origenesDB.length > 0) score += 15000;
-
-      // PRIORIDAD BAJA: CONCESIONARIA (10.000 pts)
-      const matchesConce = sConcesionarias.includes('Todas') || sConcesionarias.length === 0 || sConcesionarias.includes(auto.concesionaria || '');
-      if (matchesConce && sConcesionarias.length > 0 && !sConcesionarias.includes('Todas')) score += 10000;
-
-      // BONUS: SEGURIDAD (Airbags * 500)
-      if (attrs.includes('Seguridad')) {
-        const airbags = parseInt(auto.airbags?.toString().replace(/\D/g, '') || '0');
-        score += (airbags * 500);
+      // Atributos (Bonus)
+      if (attrs.includes('seguridad')) {
+        const ab = parseInt(auto.airbags?.toString().replace(/\D/g, '') || '0');
+        score += (ab * 500);
       }
 
       return { ...auto, score };
     }).sort((a, b) => b.score - a.score);
 
-    // 4. SELECCIÓN DE 10 MODELOS ÚNICOS
+    // 4. TOP 10 MODELOS ÚNICOS
     const vistos = new Set();
     const finalTop = [];
     for (const auto of rankingOrdenado) {
@@ -78,49 +74,46 @@ export async function POST(req: Request) {
       }
     }
 
-    // 5. IA: ANÁLISIS DE ATRIBUTOS (GEMINI 3 FLASH)
+    // 5. IA: ANÁLISIS PERSONALIZADO
     let veredictosIA: string[] = [];
     if (finalTop.length > 0) {
       try {
-        const prompt = {
-          contents: [{
-            parts: [{
-              text: `Eres un experto automotriz en Paraguay. Analiza estos 10 autos para un cliente que busca: ${attrs.join(', ')}.
-              Para cada auto, escribe una conclusión técnica de máximo 15 palabras sobre por qué encaja con sus deseos.
-              Lista de autos:
-              ${finalTop.map((a, i) => `${i + 1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, combustible ${a.combustible}, baulera ${a.bauleraLitros}L`).join('\n')}`
-            }]
-          }]
-        };
+        const prompt = `Eres un experto automotriz. Para cada uno de estos 10 autos, escribe una frase de 15 palabras que explique por qué es ideal para alguien que busca: ${attrs.join(', ')}. 
+        IMPORTANTE: Devuelve SOLO las 10 frases, una por línea, sin números ni nombres de autos.
+        Lista:
+        ${finalTop.map(a => `${a.marca} ${a.modelo} (${a.combustible}, ${a.airbags} airbags)`).join('\n')}`;
 
         const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(prompt)
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
 
         const aiData = await aiRes.json();
         const rawText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        veredictosIA = rawText.split('\n').filter((l: string) => l.trim().length > 5);
+        veredictosIA = rawText.split('\n').filter(line => line.trim().length > 10);
       } catch (e) {
         console.error("Error IA:", e);
       }
     }
 
-    // 6. CÁLCULO DE MATCH % GENEROSO Y DIFERENCIADO
+    // 6. CÁLCULO DE MATCH % CALIBRADO (Misma lógica que el Score)
     const calculateMatch = (v: any) => {
-      let s = 0;
-      if (sTipos.some(t => v.tipoCarroceria?.toLowerCase().includes(t.toLowerCase()))) s += 50000;
-      if (sMotorizaciones.some(m => v.combustible?.toLowerCase().includes(m.toLowerCase()))) s += 15000;
-      if (origenesDB.some(o => v.origenMarca?.toLowerCase().includes(o.toLowerCase()))) s += 10000;
+      let s = 15; // Empezamos con un 15% base por estar en presupuesto
+      const carroceria = (v.tipoCarroceria || "").toLowerCase();
+      const combustible = (v.combustible || "").toLowerCase();
+      const origen = (v.origenMarca || "").toLowerCase();
+
+      if (sTipos.some(t => carroceria.includes(t))) s += 45; // +45% si es el tipo correcto
+      if (sMotorizaciones.some(m => combustible.includes(m))) s += 20; // +20% motor
+      if (origenesDB.some(o => origen.includes(o))) s += 15; // +15% origen
       
-      if (attrs.includes('Seguridad')) {
+      if (attrs.includes('seguridad')) {
         const ab = parseInt(v.airbags?.toString().replace(/\D/g, '') || '0');
-        s += (ab * 800);
+        if (ab >= 6) s += 4;
       }
 
-      const result = Math.round((s / 75000) * 100);
-      return Math.min(result, 99);
+      return Math.min(s, 99);
     };
 
     // 7. FORMATEO FINAL
@@ -130,12 +123,10 @@ export async function POST(req: Request) {
         orderBy: [catalogoMatriz.precioUsd]
       });
 
-      const veredicto = veredictosIA[index]?.replace(/^\d+[\.\)\s]*/, '').trim() || "Excelente equilibrio técnico basado en tus preferencias.";
-
       return {
         ...auto,
         match_percent: calculateMatch(auto),
-        veredicto,
+        veredicto: veredictosIA[index]?.trim() || "Excelente opción equilibrada según tu presupuesto y preferencias.",
         versiones: vRaw.map(v => ({ ...v, match_percent: calculateMatch(v) }))
       };
     }));
@@ -143,7 +134,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, top10 });
 
   } catch (error: any) {
-    console.error("CRITICAL ERROR:", error.message);
+    console.error("CRITICAL:", error.message);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
