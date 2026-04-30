@@ -10,11 +10,8 @@ export async function POST(req: Request) {
     const { leadId } = await req.json();
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
     
-    if (!leadData) {
-      return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
-    }
+    if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // 1. NORMALIZACIÓN Y PREPARACIÓN DE DATOS
     const ensureArray = (val: any): string[] => {
       if (!val) return [];
       if (Array.isArray(val)) return val.map(v => String(v).toLowerCase().trim());
@@ -29,31 +26,25 @@ export async function POST(req: Request) {
     const sConce = ensureArray(leadData.concesionariaPreferencia);
 
     const mappingOrigen: Record<string, string> = {
-      'solo chinos': 'china',
-      'solo japoneses': 'japón',
-      'solo coreanos': 'corea',
-      'solo europeos': 'europa',
+      'solo chinos': 'china', 'solo japoneses': 'japón',
+      'solo coreanos': 'corea', 'solo europeos': 'europa',
     };
     const origenesTarget = sOrigen.map(o => mappingOrigen[o] || o);
 
-    // 2. EXTRACCIÓN DEL UNIVERSO DE CANDIDATOS
-    // Traemos un 15% extra del presupuesto máximo para permitir la Tier 5 (Flexibilidad de precio)
-    const precioMaxReal = leadData.presupuestoMax || 0;
+    const precioMaxReal = leadData.presupuestoMax ?? 0;
     const precioMaxConBuffer = precioMaxReal * 1.15;
 
     const universo = await db.select().from(catalogoMatriz).where(and(
-      gte(catalogoMatriz.precioUsd, leadData.presupuestoMin || 0),
+      gte(catalogoMatriz.precioUsd, leadData.presupuestoMin ?? 0),
       lte(catalogoMatriz.precioUsd, precioMaxConBuffer)
     ));
 
-    // 3. LÓGICA DE TIERS (Dureza Progresiva)
-    // Esta lógica garantiza que siempre prioricemos lo que el usuario pidió
     const autosClasificados = universo.map(auto => {
       const cTipo = (auto.tipoCarroceria || "").toLowerCase();
       const cMotor = (auto.combustible || "").toLowerCase();
       const cOrigen = (auto.origenMarca || "").toLowerCase();
       const cConce = (auto.concesionaria || "").toLowerCase();
-      const cPrecio = auto.precioUsd || 0;
+      const cPrecio = auto.precioUsd ?? 0;
 
       const matchesTipo = sTipo.length === 0 || sTipo.some(t => cTipo.includes(t));
       const matchesMotor = sMotor.length === 0 || sMotor.some(m => cMotor.includes(m));
@@ -61,40 +52,25 @@ export async function POST(req: Request) {
       const matchesConce = sConce.length === 0 || sConce.includes('todas') || sConce.some(c => cConce.includes(c));
       const matchesPrecioDuro = cPrecio <= precioMaxReal;
 
-      let tier = 99; // Fuera de criterio base
-
-      // Tier 1: Perfección absoluta (5/5)
+      let tier = 99;
       if (matchesTipo && matchesMotor && matchesOrigen && matchesConce && matchesPrecioDuro) tier = 1;
-      // Tier 2: Flexibilizamos Concesionaria (4/5)
       else if (matchesTipo && matchesMotor && matchesOrigen && matchesPrecioDuro) tier = 2;
-      // Tier 3: Flexibilizamos Origen (3/5)
       else if (matchesTipo && matchesMotor && matchesPrecioDuro) tier = 3;
-      // Tier 4: Flexibilizamos Motor (2/5)
       else if (matchesTipo && matchesPrecioDuro) tier = 4;
-      // Tier 5: Flexibilizamos Precio (Carrocería es el único límite sagrado)
       else if (matchesTipo) tier = 5;
 
       return { ...auto, tier };
     });
 
-  // 4. SELECCIÓN DE TOP 10 MODELOS ÚNICOS (TYPE-SAFE)
-const ranking = autosClasificados
-  .filter(a => a.tier <= 5)
-  .sort((a, b) => {
-    // Primero ordenamos por Tier (Prioridad de Negocio)
-    if (a.tier !== b.tier) return a.tier - b.tier;
-    
-    // Si la Tier es igual, ordenamos por precio (Prioridad de Inversión)
-    // Usamos el operador Nullish Coalescing (??) para asegurar un valor numérico
-    const precioA = a.precioUsd ?? 0;
-    const precioB = b.precioUsd ?? 0;
-    return precioA - precioB;
-  });
+    const ranking = autosClasificados
+      .filter(a => a.tier <= 5)
+      .sort((a, b) => {
+        if (a.tier !== b.tier) return a.tier - b.tier;
+        return (a.precioUsd ?? 0) - (b.precioUsd ?? 0);
+      });
 
-// Definimos el tipo explícitamente para evitar el tipo 'never[]'
-const finalTop: typeof ranking = [];
     const vistos = new Set();
-    const finalTop = [];
+    const finalTop: typeof ranking = [];
     for (const auto of ranking) {
       if (!vistos.has(auto.modelo) && finalTop.length < 10) {
         vistos.add(auto.modelo);
@@ -102,46 +78,39 @@ const finalTop: typeof ranking = [];
       }
     }
 
-    // 5. IA: JUSTIFICACIÓN ESTRATÉGICA (Gemini 3 Flash)
     let veredictosIA: string[] = [];
     if (finalTop.length > 0) {
       try {
-        const prompt = `Actúa como consultor experto de DATACAR. Justifica estos 10 autos para un cliente que prioriza: ${attrs.join(', ')}.
-        Para cada auto, escribe un veredicto de 15 palabras enfocado en beneficios técnicos reales. 
-        IMPORTANTE: Devuelve solo las 10 frases, una por línea, sin nombres de marcas ni modelos.
-        
-        Datos de los autos:
-        ${finalTop.map(a => `${a.marca} ${a.modelo}: ${a.airbags} airbags, combustible ${a.combustible}, baulera ${a.bauleraLitros}L`).join('\n')}`;
+        const prompt = `Actúa como consultor experto. Justifica estos autos para prioridades: ${attrs.join(', ')}.
+        Devuelve solo 10 frases de 15 palabras, una por línea.
+        ${finalTop.map(a => `${a.marca} ${a.modelo}: ${a.airbags} airbags, ${a.combustible}, baulera ${a.bauleraLitros}L`).join('\n')}`;
 
         const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
-
         const aiData = await aiRes.json();
         const rawText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
         veredictosIA = rawText.split('\n').filter((line: string) => line.trim().length > 10);
       } catch (e) {
-        console.error("Fallo crítico en IA:", e);
+        console.error("IA Error:", e);
       }
     }
 
-    // 6. FORMATEO Y MATCH % POR NIVEL DE CONFIANZA
     const top10 = await Promise.all(finalTop.map(async (auto, index) => {
       const vRaw = await db.query.catalogoMatriz.findMany({
-        where: eq(catalogoMatriz.modelo, auto.modelo),
+        where: eq(catalogoMatriz.modelo, auto.modelo ?? ""),
         orderBy: [catalogoMatriz.precioUsd]
       });
 
-      // Mapeo de Match % según la Tier alcanzada
       const tierMatch: Record<number, number> = { 1: 99, 2: 88, 3: 75, 4: 60, 5: 45 };
       const baseMatch = tierMatch[auto.tier] || 30;
 
       return {
         ...auto,
         match_percent: baseMatch,
-        veredicto: veredictosIA[index]?.trim() || "Opción seleccionada por robustez técnica y disponibilidad en mercado.",
+        veredicto: veredictosIA[index]?.trim() || "Opción seleccionada por robustez técnica.",
         versiones: vRaw.map(v => ({ ...v, match_percent: baseMatch }))
       };
     }));
@@ -149,7 +118,6 @@ const finalTop: typeof ranking = [];
     return NextResponse.json({ success: true, top10 });
 
   } catch (error: any) {
-    console.error("ARQUITECTO_LOG_ERROR:", error.message);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
