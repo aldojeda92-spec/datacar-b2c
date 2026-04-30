@@ -86,34 +86,25 @@ export async function POST(req: Request) {
     // 4. INTEGRACIÓN DE IA: ANÁLISIS DE ATRIBUTOS
     let veredictosIA: string[] = [];
     if (finalTop.length > 0) {
-      try {
-        const prompt = {
-          contents: [{
-            parts: [{
-              text: `Eres un experto automotriz en Paraguay. Analiza estos 10 autos seleccionados para un cliente que busca: ${attrs.join(', ')}.
-              Para cada auto, escribe una conclusión de máximo 18 palabras resaltando por qué encaja con sus atributos elegidos.
-              No los compares entre sí. No uses asteriscos. Devuelve solo las conclusiones.
+      // --- 4. IA: ANÁLISIS DE ATRIBUTOS ---
+try {
+  const prompt = {
+    contents: [{
+      parts: [{
+        text: `Eres un experto automotriz... Analiza estos 10 autos... concluye por qué encaja con ${attrs.join(', ')}...`
+      }]
+    }]
+  };
 
-              Lista de seleccionados:
-              ${finalTop.map((a, i) => `${i+1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, ${a.combustible}, baulera ${a.bauleraLitros}L, ADAS: ${a.adas}`).join('\n')}`
-            }]
-          }]
-        };
-
-        const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(prompt)
-        });
-        
-        const aiData = await aiRes.json();
-        if (aiData.candidates?.[0]?.content?.parts?.[0]?.text) {
-          veredictosIA = aiData.candidates[0].content.parts[0].text.split('\n').filter((l: string) => l.trim().length > 5);
-        }
-      } catch (e) {
-        console.error("Error en Gemini IA:", e);
-      }
-    }
+  const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
+    method: 'POST',
+    // ... resto de la configuración
+  });
+  
+  // ... procesamiento de la respuesta
+} catch (e) {
+  console.error("Error IA:", e); // Si falla la IA, el código NO se cuelga
+}
 
   // 5. CÁLCULO DE MATCH % CALIBRADO (Más generoso y detallado)
     const calculateMatch = (v: any) => {
