@@ -77,11 +77,22 @@ export async function POST(req: Request) {
       return { ...auto, tier };
     });
 
-    // 4. SELECCIÓN DE TOP 10 MODELOS ÚNICOS
-    const ranking = autosClasificados
-      .filter(a => a.tier <= 5)
-      .sort((a, b) => a.tier - b.tier || a.precioUsd - b.precioUsd);
+  // 4. SELECCIÓN DE TOP 10 MODELOS ÚNICOS (TYPE-SAFE)
+const ranking = autosClasificados
+  .filter(a => a.tier <= 5)
+  .sort((a, b) => {
+    // Primero ordenamos por Tier (Prioridad de Negocio)
+    if (a.tier !== b.tier) return a.tier - b.tier;
+    
+    // Si la Tier es igual, ordenamos por precio (Prioridad de Inversión)
+    // Usamos el operador Nullish Coalescing (??) para asegurar un valor numérico
+    const precioA = a.precioUsd ?? 0;
+    const precioB = b.precioUsd ?? 0;
+    return precioA - precioB;
+  });
 
+// Definimos el tipo explícitamente para evitar el tipo 'never[]'
+const finalTop: typeof ranking = [];
     const vistos = new Set();
     const finalTop = [];
     for (const auto of ranking) {
