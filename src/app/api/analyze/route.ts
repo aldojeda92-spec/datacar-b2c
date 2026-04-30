@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { catalogoMatriz, leads } from '@/lib/schema';
-import { eq, and, gte, lte, ilike, sql, or } from 'drizzle-orm';
+import { eq, and, gte, lte, sql } from 'drizzle-orm';
 
 export const maxDuration = 60;
 
@@ -33,58 +33,62 @@ export async function POST(req: Request) {
     };
     const origenesDB = sOrigenes.map(o => mappingOrigen[o] || o).filter(Boolean);
 
-    // 2. REGLA DE ORO: SQL CON JERARQUÍA DE PESOS
-    const candidatos = await db.select({
-      id: catalogoMatriz.id,
-      marca: catalogoMatriz.marca,
-      modelo: catalogoMatriz.modelo,
-      version: catalogoMatriz.version,
-      precioUsd: catalogoMatriz.precioUsd,
-      origenMarca: catalogoMatriz.origenMarca,
-      combustible: catalogoMatriz.combustible,
-      concesionaria: catalogoMatriz.concesionaria,
-      urlImagen: catalogoMatriz.urlImagen,
-      bauleraLitros: catalogoMatriz.bauleraLitros,
-      airbags: catalogoMatriz.airbags,
-      tipoCarroceria: catalogoMatriz.tipoCarroceria,
-      adas: catalogoMatriz.adas,
-      score: sql<number>`
-        (CASE WHEN ${sTipos.length > 0} AND ${catalogoMatriz.tipoCarroceria} ILIKE ANY(ARRAY[${sTipos.length > 0 ? sTipos.map(t => '%' + t + '%') : ['%']}]) THEN 50000 ELSE 0 END) +
-        (CASE WHEN ${sMotorizaciones.length > 0} AND ${catalogoMatriz.combustible} ILIKE ANY(ARRAY[${sMotorizaciones.length > 0 ? sMotorizaciones.map(m => '%' + m + '%') : ['%']}]) THEN 20000 ELSE 0 END) +
-        (CASE WHEN ${origenesDB.length > 0} AND ${catalogoMatriz.origenMarca} ILIKE ANY(ARRAY[${origenesDB.length > 0 ? origenesDB.map(o => '%' + o + '%') : ['%']}]) THEN 15000 ELSE 0 END) +
-        (CASE WHEN ${sConcesionarias.length > 0} AND NOT ('Todas' = ANY(ARRAY[${sConcesionarias}])) AND ${catalogoMatriz.concesionaria} = ANY(ARRAY[${sConcesionarias.length > 0 ? sConcesionarias : ['']}]) THEN 10000 ELSE 0 END) +
-        (CASE WHEN ${attrs.includes('Seguridad')} THEN (COALESCE(NULLIF(${catalogoMatriz.airbags}, '')::int, 0) * 500) ELSE 0 END)
-      `.as('score')
-    })
-    .from(catalogoMatriz)
-    .where(and(
+    // 2. CONSULTA BASE (SEGURA Y RÁPIDA)
+    const universoAutos = await db.select().from(catalogoMatriz).where(and(
       gte(catalogoMatriz.precioUsd, leadData.presupuestoMin),
       lte(catalogoMatriz.precioUsd, leadData.presupuestoMax)
-    ))
-    .orderBy(sql`score DESC`, catalogoMatriz.precioUsd)
-    .limit(100);
+    ));
 
-    // 3. SELECCIÓN DE 10 MODELOS ÚNICOS
+    // 3. REGLA DE ORO: SCORING DE JERARQUÍA (PROCESADO EN JS)
+    const rankingOrdenado = universoAutos.map(auto => {
+      let score = 0;
+
+      // SUPER PRIORIDAD: CARROCERÍA (50.000 pts)
+      const matchesTipo = sTipos.length === 0 || sTipos.some(t => auto.tipoCarroceria?.toLowerCase().includes(t.toLowerCase()));
+      if (matchesTipo && sTipos.length > 0) score += 50000;
+
+      // PRIORIDAD ALTA: MOTORIZACIÓN (20.000 pts)
+      const matchesMotor = sMotorizaciones.length === 0 || sMotorizaciones.some(m => auto.combustible?.toLowerCase().includes(m.toLowerCase()));
+      if (matchesMotor && sMotorizaciones.length > 0) score += 20000;
+
+      // PRIORIDAD MEDIA: ORIGEN (15.000 pts)
+      const matchesOrigen = origenesDB.length === 0 || origenesDB.some(o => auto.origenMarca?.toLowerCase().includes(o.toLowerCase()));
+      if (matchesOrigen && origenesDB.length > 0) score += 15000;
+
+      // PRIORIDAD BAJA: CONCESIONARIA (10.000 pts)
+      const matchesConce = sConcesionarias.includes('Todas') || sConcesionarias.length === 0 || sConcesionarias.includes(auto.concesionaria || '');
+      if (matchesConce && sConcesionarias.length > 0 && !sConcesionarias.includes('Todas')) score += 10000;
+
+      // BONUS: SEGURIDAD (Airbags * 500)
+      if (attrs.includes('Seguridad')) {
+        const airbags = parseInt(auto.airbags?.toString().replace(/\D/g, '') || '0');
+        score += (airbags * 500);
+      }
+
+      return { ...auto, score };
+    }).sort((a, b) => b.score - a.score);
+
+    // 4. SELECCIÓN DE 10 MODELOS ÚNICOS
     const vistos = new Set();
     const finalTop = [];
-    for (const auto of candidatos) {
+    for (const auto of rankingOrdenado) {
       if (!vistos.has(auto.modelo) && finalTop.length < 10) {
         vistos.add(auto.modelo);
         finalTop.push(auto);
       }
     }
 
-    // 4. INTEGRACIÓN DE IA: ANÁLISIS DE ATRIBUTOS
+    // 5. IA: ANÁLISIS DE ATRIBUTOS (GEMINI 3 FLASH)
     let veredictosIA: string[] = [];
     if (finalTop.length > 0) {
       try {
         const prompt = {
           contents: [{
             parts: [{
-              text: `Eres un experto automotriz en Paraguay. Analiza estos 10 autos para un cliente que busca: ${attrs.join(', ')}. 
-              Para cada auto, escribe una conclusión de máximo 15 palabras resaltando por qué encaja con sus atributos.
-              Lista:
-              ${finalTop.map((a, i) => `${i + 1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, ${a.combustible}, baulera ${a.bauleraLitros}L`).join('\n')}`
+              text: `Eres un experto automotriz en Paraguay. Analiza estos 10 autos para un cliente que busca: ${attrs.join(', ')}.
+              Para cada auto, escribe una conclusión técnica de máximo 15 palabras sobre por qué encaja con sus deseos.
+              Lista de autos:
+              ${finalTop.map((a, i) => `${i + 1}. ${a.marca} ${a.modelo}: ${a.airbags} airbags, combustible ${a.combustible}, baulera ${a.bauleraLitros}L`).join('\n')}`
             }]
           }]
         };
@@ -96,43 +100,37 @@ export async function POST(req: Request) {
         });
 
         const aiData = await aiRes.json();
-        if (aiData.candidates?.[0]?.content?.parts?.[0]?.text) {
-          veredictosIA = aiData.candidates[0].content.parts[0].text.split('\n').filter((l: string) => l.trim().length > 5);
-        }
+        const rawText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        veredictosIA = rawText.split('\n').filter((l: string) => l.trim().length > 5);
       } catch (e) {
         console.error("Error IA:", e);
       }
     }
 
-    // 5. CÁLCULO DE MATCH % CALIBRADO
+    // 6. CÁLCULO DE MATCH % GENEROSO Y DIFERENCIADO
     const calculateMatch = (v: any) => {
-      let currentScore = 0;
-      if (sTipos.some(t => v.tipoCarroceria?.toLowerCase().includes(t.toLowerCase()))) currentScore += 50000;
-      if (sMotorizaciones.some(m => v.combustible?.toLowerCase().includes(m.toLowerCase()))) currentScore += 15000;
-      if (origenesDB.some(o => v.origenMarca?.toLowerCase().includes(o.toLowerCase()))) currentScore += 10000;
-      if (sConcesionarias.some(c => v.concesionaria === c)) currentScore += 5000;
-
+      let s = 0;
+      if (sTipos.some(t => v.tipoCarroceria?.toLowerCase().includes(t.toLowerCase()))) s += 50000;
+      if (sMotorizaciones.some(m => v.combustible?.toLowerCase().includes(m.toLowerCase()))) s += 15000;
+      if (origenesDB.some(o => v.origenMarca?.toLowerCase().includes(o.toLowerCase()))) s += 10000;
+      
       if (attrs.includes('Seguridad')) {
-        const airbags = parseInt(v.airbags) || 0;
-        currentScore += (airbags * 800);
-      }
-      if (attrs.includes('Espacio')) {
-        const baulera = parseInt(v.bauleraLitros) || 0;
-        currentScore += (baulera * 5);
+        const ab = parseInt(v.airbags?.toString().replace(/\D/g, '') || '0');
+        s += (ab * 800);
       }
 
-      const matchFinal = Math.round((currentScore / 75000) * 100);
-      return Math.min(matchFinal, 99);
+      const result = Math.round((s / 75000) * 100);
+      return Math.min(result, 99);
     };
 
-    // 6. MAPEO FINAL DE RESULTADOS
+    // 7. FORMATEO FINAL
     const top10 = await Promise.all(finalTop.map(async (auto, index) => {
       const vRaw = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo),
         orderBy: [catalogoMatriz.precioUsd]
       });
 
-      const veredicto = veredictosIA[index]?.replace(/^\d+[\.\)\s]*/, '').trim() || "Configuración técnica optimizada para tus criterios de búsqueda.";
+      const veredicto = veredictosIA[index]?.replace(/^\d+[\.\)\s]*/, '').trim() || "Excelente equilibrio técnico basado en tus preferencias.";
 
       return {
         ...auto,
@@ -145,7 +143,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, top10 });
 
   } catch (error: any) {
-    console.error("CRITICAL ERROR:", error);
+    console.error("CRITICAL ERROR:", error.message);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
