@@ -11,11 +11,9 @@ export async function POST(req: Request) {
 
   try {
     const { leadId } = await req.json();
-    console.log(`>>> [AUDIT] Procesando Lead ID: ${leadId}`);
-
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
+    
     if (!leadData) {
-      console.error(">>> [ERROR] Lead no encontrado en DB");
       return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
     }
 
@@ -26,7 +24,7 @@ export async function POST(req: Request) {
       return [];
     };
 
-    // Parámetros del Lead
+    // Parámetros de búsqueda
     const attrs = ensureArray(leadData.atributos);
     const sMotor = ensureArray(leadData.motorizacion);
     const sTipo = ensureArray(leadData.tipoVehiculo);
@@ -35,22 +33,17 @@ export async function POST(req: Request) {
     const pMin = leadData.presupuestoMin ?? 0;
     const pMax = leadData.presupuestoMax ?? 999999;
 
-    console.log(">>> [AUDIT] Filtros normalizados:", { sTipo, sMotor, pMin, pMax });
-
-    // 1. CARGA MASIVA (Aumentamos el margen al 30% para asegurar resultados)
+    // 1. CARGA DE CANDIDATOS (Buffer de precio del 30% para evitar listas vacías)
     const universo = await db.select().from(catalogoMatriz).where(and(
       gte(catalogoMatriz.precioUsd, pMin),
-      lte(catalogoMatriz.precioUsd, pMax * 1.30) 
+      lte(catalogoMatriz.precioUsd, pMax * 1.30)
     ));
 
-    console.log(`>>> [AUDIT] Universo cargado: ${universo.length} vehículos`);
-
     if (universo.length === 0) {
-      console.warn(">>> [WARN] No hay NADA en ese rango de precios. Abortando.");
-      return NextResponse.json({ success: true, top10: [], message: "No hay vehículos en este rango" });
+      return NextResponse.json({ success: true, top10: [] });
     }
 
-    // 2. CLASIFICACIÓN POR TIERS (Dureza Progresiva)
+    // 2. LÓGICA DE TIERS (Dureza Progresiva)
     const mappingOrigen: Record<string, string> = {
       'solo chinos': 'china', 'solo japoneses': 'japón',
       'solo coreanos': 'corea', 'solo europeos': 'europa',
@@ -75,17 +68,17 @@ export async function POST(req: Request) {
       else if (mTipo && mMotor && mOrigen && mPrecio) tier = 2;
       else if (mTipo && mMotor && mPrecio) tier = 3;
       else if (mTipo && mPrecio) tier = 4;
-      else if (mTipo) tier = 5; // Supera presupuesto pero es el tipo de auto
-      else tier = 6; // Nada coincide pero está en precio
+      else if (mTipo) tier = 5; 
+      else tier = 6;
 
       return { ...auto, tier };
     });
 
     // 3. RANKING Y UNICIDAD
     const sorted = clasificados.sort((a, b) => a.tier - b.tier || (a.precioUsd ?? 0) - (b.precioUsd ?? 0));
-    
     const vistos = new Set();
     const finalTop: typeof sorted = [];
+    
     for (const v of sorted) {
       if (!vistos.has(v.modelo) && finalTop.length < 10) {
         vistos.add(v.modelo);
@@ -93,35 +86,31 @@ export async function POST(req: Request) {
       }
     }
 
-    console.log(`>>> [AUDIT] Top 10 finalizado. Tiers presentes: ${[...new Set(finalTop.map(a => a.tier))]}`);
+    // CORRECCIÓN DE ERROR DE COMPILACIÓN: Uso Array.from en lugar de spread en Set
+    const tiersEncontrados = Array.from(new Set(finalTop.map(a => a.tier)));
+    console.log(`>>> [AUDIT] Top 10 finalizado. Tiers presentes: ${tiersEncontrados.join(', ')}`);
 
-    // 4. IA (Con Timeout controlado para evitar cuelgues del frontend)
+    // 4. IA (Justificación por atributos del Lead)
     let veredictos: string[] = [];
     if (finalTop.length > 0) {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 seg max para la IA
-
-        const prompt = `Actúa como consultor DATACAR. Justifica estos autos para: ${attrs.join(', ')}. Solo frases de 15 palabras, una por línea.
+        const prompt = `Actúa como consultor experto. Justifica estos 10 autos para alguien que prioriza: ${attrs.join(', ')}. Escribe una frase de 15 palabras por cada auto, una por línea.
         ${finalTop.map(a => `${a.marca} ${a.modelo}: ${a.airbags} airbags, ${a.combustible}`).join('\n')}`;
 
         const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-          signal: controller.signal
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
-        
-        clearTimeout(timeoutId);
         const aiData = await aiRes.json();
         const text = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
         veredictos = text.split('\n').filter((l: string) => l.trim().length > 5);
       } catch (e) {
-        console.warn(">>> [WARN] IA falló o dio timeout. Usando fallback.");
+        console.warn(">>> [WARN] IA falló. Usando fallback.");
       }
     }
 
-    // 5. RESPUESTA FINAL
+    // 5. MAPEO FINAL
     const top10 = await Promise.all(finalTop.map(async (auto, i) => {
       const vRaw = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo ?? ""),
@@ -129,12 +118,13 @@ export async function POST(req: Request) {
       });
 
       const tierMatch: Record<number, number> = { 1: 99, 2: 88, 3: 75, 4: 60, 5: 45, 6: 30 };
-      
+      const currentMatch = tierMatch[auto.tier] || 25;
+
       return {
         ...auto,
-        match_percent: tierMatch[auto.tier] || 25,
-        veredicto: veredictos[i]?.trim() || "Opción recomendada por disponibilidad y configuración técnica.",
-        versiones: vRaw.map(v => ({ ...v, match_percent: tierMatch[auto.tier] || 25 }))
+        match_percent: currentMatch,
+        veredicto: veredictos[i]?.trim() || "Excelente equilibrio técnico basado en tu presupuesto.",
+        versiones: vRaw.map(v => ({ ...v, match_percent: currentMatch }))
       };
     }));
 
@@ -142,7 +132,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, top10 });
 
   } catch (error: any) {
-    console.error(">>> [FATAL ERROR] Excepción no controlada:", error);
+    console.error(">>> [FATAL ERROR]:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
