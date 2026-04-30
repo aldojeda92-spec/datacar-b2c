@@ -9,9 +9,10 @@ export async function POST(req: Request) {
   try {
     const { leadId } = await req.json();
     const leadData = await db.query.leads.findFirst({ where: eq(leads.id, leadId) });
+    
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // 1. NORMALIZACIÓN DE ENTRADAS (Literal de la DB)
+    // 1. SANITIZACIÓN Y NORMALIZACIÓN
     const normalize = (val: any): string[] => {
       if (!val) return [];
       const arr = Array.isArray(val) ? val : [val];
@@ -22,23 +23,27 @@ export async function POST(req: Request) {
     const sMotor = normalize(leadData.motorizacion);
     const sOrigen = normalize(leadData.origen).map(o => o.replace('solo ', ''));
     const sConce = normalize(leadData.concesionariaPreferencia);
-    const pMin = leadData.presupuestoMin ?? 0;
-    const pMax = leadData.presupuestoMax ?? 999999;
+    const attrs = normalize(leadData.atributos);
 
-    // 2. SQL: FILTRO DE SEGURIDAD (Tipo y Precio con Buffer)
-    // No procesamos nada que no sea el tipo de auto pedido.
+    // REDONDEO CRÍTICO: Evita el error de precisión en Postgres
+    const pMin = Math.floor(Number(leadData.presupuestoMin) || 0);
+    const pMax = Math.floor(Number(leadData.presupuestoMax) || 999999);
+    const pMaxConBuffer = Math.floor(pMax * 1.15); // El 15% de buffer para Tier 5
+
+    // 2. SQL: FILTRO DE SEGURIDAD (HARD FILTERS)
     const queryConditions = [
       gte(catalogoMatriz.precioUsd, pMin),
-      lte(catalogoMatriz.precioUsd, pMax * 1.15)
+      lte(catalogoMatriz.precioUsd, pMaxConBuffer)
     ];
 
+    // Si el usuario eligió tipos, el SQL es inflexible aquí para no traer basura
     if (sTipo.length > 0) {
       queryConditions.push(or(...sTipo.map(t => ilike(catalogoMatriz.tipoCarroceria, `%${t}%`)))!);
     }
 
     const candidatos = await db.select().from(catalogoMatriz).where(and(...queryConditions));
 
-    // 3. LÓGICA DE TIERS (Degradación de Reglas)
+    // 3. LÓGICA DE TIERS (PROCESAMIENTO EN MEMORIA)
     const clasificados = candidatos.map(auto => {
       const dbTipo = (auto.tipoCarroceria || "").toLowerCase();
       const dbMotor = (auto.combustible || "").toLowerCase();
@@ -46,7 +51,6 @@ export async function POST(req: Request) {
       const dbConce = (auto.concesionaria || "").toLowerCase();
       const dbPrecio = auto.precioUsd ?? 0;
 
-      // Verificaciones exactas
       const mTipo = sTipo.length === 0 || sTipo.some(t => dbTipo.includes(t));
       const mMotor = sMotor.length === 0 || sMotor.some(m => dbMotor.includes(m));
       const mOrigen = sOrigen.length === 0 || sOrigen.some(o => dbOrigen.includes(o));
@@ -54,17 +58,16 @@ export async function POST(req: Request) {
       const mPrecioDuro = dbPrecio <= pMax;
 
       let tier = 99;
-
       if (mTipo && mMotor && mOrigen && mConce && mPrecioDuro) tier = 1;
       else if (mTipo && mMotor && mOrigen && mPrecioDuro) tier = 2;
       else if (mTipo && mMotor && mPrecioDuro) tier = 3;
       else if (mTipo && mPrecioDuro) tier = 4;
-      else if (mTipo && mMotor && mOrigen) tier = 5; // Aquí entra la flexibilidad de precio (+15%)
+      else if (mTipo && mMotor && mOrigen) tier = 5; // Flexibilidad de precio
 
       return { ...auto, tier };
     });
 
-    // 4. RANKING Y UNICIDAD POR MODELO
+    // 4. RANKING Y UNICIDAD
     const ranking = clasificados
       .filter(a => a.tier <= 5)
       .sort((a, b) => a.tier - b.tier || (a.precioUsd ?? 0) - (b.precioUsd ?? 0));
@@ -78,13 +81,12 @@ export async function POST(req: Request) {
       }
     }
 
-    // 5. IA: JUSTIFICACIÓN POR ATRIBUTOS (Solo si hay resultados)
+    // 5. IA: GENERACIÓN DE VEREDICTO
     let veredictos: string[] = [];
     if (finalTop.length > 0) {
       try {
-        const attrs = normalize(leadData.atributos);
-        const prompt = `Actúa como consultor experto. Justifica estos 10 autos para prioridades: ${attrs.join(', ')}.
-        Escribe una frase de 15 palabras por auto. Una por línea.
+        const prompt = `Actúa como consultor experto. Justifica estos autos para: ${attrs.join(', ')}.
+        Escribe una frase de 15 palabras por auto. Una por línea. No nombres el modelo.
         Lista: ${finalTop.map(a => `${a.marca} ${a.modelo}: ${a.airbags} airbags, ${a.combustible}`).join('\n')}`;
 
         const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
@@ -96,11 +98,11 @@ export async function POST(req: Request) {
         const text = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
         veredictos = text.split('\n').filter((l: string) => l.trim().length > 10);
       } catch (e) {
-        console.warn("Fallo IA");
+        console.error("Fallo IA");
       }
     }
 
-    // 6. RESPUESTA FINAL CON MATCH % ASOCIADO A TIER
+    // 6. RESPUESTA FINAL
     const top10 = await Promise.all(finalTop.map(async (auto, i) => {
       const vRaw = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo ?? ""),
