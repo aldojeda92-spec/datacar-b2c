@@ -49,8 +49,17 @@ export async function POST(req: Request) {
     const sMotorRaw = parseData(leadData.motorizacion).filter(isNotAll);
     const sMotorTarget = sMotorRaw.flatMap(m => motorMap[m] || [m]);
 
-    // ORIGEN DIRECTO: Sin diccionario, confiamos en la integridad de tu DB
-    const sOrigenTarget = parseData(leadData.origen).filter(isNotAll);
+ // DICCIONARIO DE ORIGEN (Traductor Frontend -> DB)
+    const origenMap: Record<string, string[]> = {
+      'solo chinos': ['china', 'chino', 'prc'],
+      'solo japoneses': ['japón', 'japon', 'japonés', 'japones'],
+      'solo coreanos': ['corea', 'coreano', 'corea del sur'],
+      'solo europeos': ['europa', 'europeo', 'alemania', 'francia', 'inglaterra', 'italia', 'españa'],
+      'solo usa': ['usa', 'eeuu', 'estados unidos', 'ee.uu.']
+    };
+    
+    const sOrigenRaw = parseData(leadData.origen).filter(isNotAll);
+    const sOrigenTarget = sOrigenRaw.flatMap(o => origenMap[o] || [o.replace('solo ', '')]);
 
     // SANITIZACIÓN DE PRECIOS
     const pMin = Math.floor(Number(leadData.presupuestoMin) || 0);
