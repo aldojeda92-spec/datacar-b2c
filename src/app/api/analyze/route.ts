@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { catalogoMatriz, leads } from '@/lib/schema';
-import { eq, and, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, gte, lte } from 'drizzle-orm';
 
 export const maxDuration = 60;
 
@@ -13,12 +13,12 @@ export async function POST(req: Request) {
 
     const ensureArray = (val: any): string[] => {
       if (!val) return [];
-      if (Array.isArray(val)) return val.map(v => v.toLowerCase().trim());
+      if (Array.isArray(val)) return val.map(v => String(v).toLowerCase().trim());
       if (typeof val === 'string' && val.trim() !== '') return [val.toLowerCase().trim()];
       return [];
     };
 
-    // 1. NORMALIZACIÓN (Todo a minúsculas para comparar fácil)
+    // 1. NORMALIZACIÓN
     const attrs = ensureArray(leadData.atributos);
     const sMotorizaciones = ensureArray(leadData.motorizacion);
     const sTipos = ensureArray(leadData.tipoVehiculo);
@@ -33,38 +33,31 @@ export async function POST(req: Request) {
     };
     const origenesDB = sOrigenes.map(o => mappingOrigen[o] || o);
 
-    // 2. CONSULTA BASE POR PRECIO
+    // 2. CONSULTA BASE
     const universoAutos = await db.select().from(catalogoMatriz).where(and(
       gte(catalogoMatriz.precioUsd, leadData.presupuestoMin),
       lte(catalogoMatriz.precioUsd, leadData.presupuestoMax)
     ));
 
-    // 3. SCORING DE JERARQUÍA (REGLA DE ORO)
+    // 3. SCORING (REGLA DE ORO)
     const rankingOrdenado = universoAutos.map(auto => {
       let score = 0;
       const carroceriaAuto = (auto.tipoCarroceria || "").toLowerCase();
       const combustibleAuto = (auto.combustible || "").toLowerCase();
       const origenAuto = (auto.origenMarca || "").toLowerCase();
 
-      // REGLA DE ORO: Carrocería (50.000 pts) - Uso .includes para mayor flexibilidad
       if (sTipos.length > 0 && sTipos.some(t => carroceriaAuto.includes(t))) score += 50000;
-      
-      // Motorización (20.000 pts)
       if (sMotorizaciones.length > 0 && sMotorizaciones.some(m => combustibleAuto.includes(m))) score += 20000;
-      
-      // Origen (15.000 pts)
       if (origenesDB.length > 0 && origenesDB.some(o => origenAuto.includes(o))) score += 15000;
 
-      // Atributos (Bonus)
       if (attrs.includes('seguridad')) {
         const ab = parseInt(auto.airbags?.toString().replace(/\D/g, '') || '0');
         score += (ab * 500);
       }
-
       return { ...auto, score };
     }).sort((a, b) => b.score - a.score);
 
-    // 4. TOP 10 MODELOS ÚNICOS
+    // 4. TOP 10 ÚNICOS
     const vistos = new Set();
     const finalTop = [];
     for (const auto of rankingOrdenado) {
@@ -91,28 +84,28 @@ export async function POST(req: Request) {
 
         const aiData = await aiRes.json();
         const rawText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        veredictosIA = rawText.split('\n').filter(line => line.trim().length > 10);
+        // CORRECCIÓN AQUÍ: Añadimos (line: string) para satisfacer a TypeScript
+        veredictosIA = rawText.split('\n').filter((line: string) => line.trim().length > 10);
       } catch (e) {
         console.error("Error IA:", e);
       }
     }
 
-    // 6. CÁLCULO DE MATCH % CALIBRADO (Misma lógica que el Score)
+    // 6. MATCH % CALIBRADO
     const calculateMatch = (v: any) => {
-      let s = 15; // Empezamos con un 15% base por estar en presupuesto
+      let s = 15; 
       const carroceria = (v.tipoCarroceria || "").toLowerCase();
       const combustible = (v.combustible || "").toLowerCase();
       const origen = (v.origenMarca || "").toLowerCase();
 
-      if (sTipos.some(t => carroceria.includes(t))) s += 45; // +45% si es el tipo correcto
-      if (sMotorizaciones.some(m => combustible.includes(m))) s += 20; // +20% motor
-      if (origenesDB.some(o => origen.includes(o))) s += 15; // +15% origen
+      if (sTipos.length > 0 && sTipos.some(t => carroceria.includes(t))) s += 45;
+      if (sMotorizaciones.length > 0 && sMotorizaciones.some(m => combustible.includes(m))) s += 20;
+      if (origenesDB.length > 0 && origenesDB.some(o => origen.includes(o))) s += 15;
       
       if (attrs.includes('seguridad')) {
         const ab = parseInt(v.airbags?.toString().replace(/\D/g, '') || '0');
         if (ab >= 6) s += 4;
       }
-
       return Math.min(s, 99);
     };
 
@@ -134,7 +127,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, top10 });
 
   } catch (error: any) {
-    console.error("CRITICAL:", error.message);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
