@@ -14,30 +14,29 @@ export async function POST(req: Request) {
     
     if (!leadData) return NextResponse.json({ error: "Lead no encontrado" }, { status: 404 });
 
-    // 1. PARSEO ANTIBALAS (Detecta Strings, Arrays y JSONs malformados del Frontend)
+    // 1. PARSEO ANTIBALAS (Limpieza de inputs)
     const parseData = (val: any): string[] => {
       if (!val) return [];
       if (Array.isArray(val)) return val.map(v => String(v).trim().toLowerCase());
       if (typeof val === 'string') {
         try {
-          // Intenta parsear si el frontend mandó '["HEV", "SUV"]'
           const parsed = JSON.parse(val);
           if (Array.isArray(parsed)) return parsed.map(v => String(v).trim().toLowerCase());
         } catch (e) {
-          // Si no es JSON, asume separador por comas
           return val.split(',').map(v => v.trim().toLowerCase());
         }
       }
       return [String(val).trim().toLowerCase()];
     };
 
-    const sTipo = parseData(leadData.tipoVehiculo).filter(v => v !== 'todas' && v !== '');
-    const sMotorRaw = parseData(leadData.motorizacion).filter(v => v !== 'todas' && v !== '');
-    const sOrigen = parseData(leadData.origen).map(o => o.replace('solo ', '')).filter(v => v !== 'todas' && v !== '');
+    // Función auxiliar para ignorar valores de "selección total"
+    const isNotAll = (v: string) => !['todas', 'todos', 'cualquiera', 'cualquier', ''].includes(v);
+
+    const sTipo = parseData(leadData.tipoVehiculo).filter(isNotAll);
     const sConce = parseData(leadData.concesionariaPreferencia);
     const attrs = parseData(leadData.atributos);
 
-    // 2. DICCIONARIO DE MOTORIZACIÓN EXPANDIDO
+    // 2. DICCIONARIO DE MOTORIZACIÓN (Intocable, traduce UI a Data Técnica)
     const motorMap: Record<string, string[]> = {
       'hev': ['híbrido', 'hybrid', 'autorrecargable', 'hev', 'mhev'],
       'phev': ['enchufable', 'plug-in', 'phev', 'híbrido enchufable'],
@@ -47,15 +46,19 @@ export async function POST(req: Request) {
       'nafta': ['nafta', 'gasolina', 'gas']
     };
     
+    const sMotorRaw = parseData(leadData.motorizacion).filter(isNotAll);
     const sMotorTarget = sMotorRaw.flatMap(m => motorMap[m] || [m]);
 
+    // ORIGEN DIRECTO: Sin diccionario, confiamos en la integridad de tu DB
+    const sOrigenTarget = parseData(leadData.origen).filter(isNotAll);
+
+    // SANITIZACIÓN DE PRECIOS
     const pMin = Math.floor(Number(leadData.presupuestoMin) || 0);
     const pMax = Math.floor(Number(leadData.presupuestoMax) || 999999);
 
-    console.log(">>> [AUDITORÍA DE FILTROS] - Si esto está vacío, el Frontend no está enviando la data:");
-    console.log({ sTipo, sMotorTarget, sOrigen, pMin, pMax });
+    console.log(">>> [ARQUITECTURA] Payload Mapeado:", { sTipo, sMotorTarget, sOrigenTarget, pMin, pMax });
 
-    // 3. CONSTRUCCIÓN DE SQL QUIRÚRGICO
+    // 3. SQL QUIRÚRGICO (HARD FILTERS)
     const queryConditions = [
       gte(catalogoMatriz.precioUsd, pMin),
       lte(catalogoMatriz.precioUsd, pMax)
@@ -65,7 +68,6 @@ export async function POST(req: Request) {
       queryConditions.push(or(...sTipo.map(t => ilike(catalogoMatriz.tipoCarroceria, `%${t}%`)))!);
     }
 
-    // EL GRAN ARREGLO: Buscamos en 'combustible' Y en 'motor' al mismo tiempo
     if (sMotorTarget.length > 0) {
       const motorConditions = sMotorTarget.flatMap(m => [
         ilike(catalogoMatriz.combustible, `%${m}%`),
@@ -74,29 +76,32 @@ export async function POST(req: Request) {
       queryConditions.push(or(...motorConditions)!);
     }
 
-    if (sOrigen.length > 0) {
-      queryConditions.push(or(...sOrigen.map(o => ilike(catalogoMatriz.origenMarca, `%${o}%`)))!);
+    if (sOrigenTarget.length > 0) {
+      queryConditions.push(or(...sOrigenTarget.map(o => ilike(catalogoMatriz.origenMarca, `%${o}%`)))!);
     }
 
-    // 4. EJECUCIÓN DIRECTA
+    // Ejecución. Si no hay match exacto, devolvemos vacío y el Frontend debe mostrar mensaje de "No hay opciones".
     const candidatosEstrictos = await db.select().from(catalogoMatriz).where(and(...queryConditions));
 
     if (candidatosEstrictos.length === 0) {
       return NextResponse.json({ success: true, top10: [] });
     }
 
-    // 5. ORDENAMIENTO POR CONCESIONARIA (El único filtro blando permitido)
+    // 4. ORDENAMIENTO POR CONCESIONARIA (SOFT FILTER)
     const clasificados = candidatosEstrictos.map(auto => {
       const dbConce = (auto.concesionaria || "").toLowerCase();
-      const isConceMatch = sConce.length === 0 || sConce.includes('todas') || sConce.some(c => dbConce.includes(c));
+      // Verificamos si pidió una concesionaria específica o "todas"
+      const isConceMatch = sConce.length === 0 || sConce.some(c => ['todas', 'todos'].includes(c)) || sConce.some(c => dbConce.includes(c));
       return { ...auto, isConceMatch, matchPercent: isConceMatch ? 99 : 85 };
     });
 
+    // Orden: Primero las que hacen match con la concesionaria, luego por precio de menor a mayor
     const sorted = clasificados.sort((a, b) => {
       if (a.isConceMatch === b.isConceMatch) return (a.precioUsd ?? 0) - (b.precioUsd ?? 0);
       return a.isConceMatch ? -1 : 1;
     });
 
+    // Unicidad (Top 10 modelos distintos)
     const vistos = new Set();
     const finalTop: typeof sorted = [];
     for (const a of sorted) {
@@ -106,7 +111,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 6. IA: JUSTIFICACIÓN
+    // 5. IA: JUSTIFICACIÓN POR ATRIBUTOS
     let veredictos: string[] = [];
     if (finalTop.length > 0) {
       try {
@@ -127,7 +132,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 7. RESPUESTA FINAL
+    // 6. RESPUESTA FINAL
     const top10 = await Promise.all(finalTop.map(async (auto, i) => {
       const vRaw = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo ?? ""),
@@ -137,7 +142,7 @@ export async function POST(req: Request) {
       return {
         ...auto,
         match_percent: auto.matchPercent,
-        veredicto: veredictos[i]?.trim() || "Cumple 100% con tu configuración estricta de carrocería, motorización y presupuesto.",
+        veredicto: veredictos[i]?.trim() || "Cumple 100% con tu configuración estricta de carrocería, motorización, origen y presupuesto.",
         versiones: vRaw.map(v => ({ ...v, match_percent: auto.matchPercent }))
       };
     }));
