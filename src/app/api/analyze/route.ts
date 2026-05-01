@@ -96,30 +96,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, top10: [] });
     }
 
-    // 4. ALGORITMO DATACAR MATCH SCORE (Scoring Dinámico)
+// 4. ALGORITMO DATACAR MATCH SCORE (Scoring Dinámico sobre el 100% de la muestra)
+    
+    // 4.1. Evaluar Concesionaria en TODOS los resultados de la base de datos
     const candidatosConConcesionaria = candidatosEstrictos.map(auto => {
       const dbConce = (auto.concesionaria || "").toLowerCase();
       const isConceMatch = sConce.length === 0 || sConce.some(c => ['todas', 'todos'].includes(c)) || sConce.some(c => dbConce.includes(c));
       return { ...auto, isConceMatch };
     });
 
-    // Unicidad (Top 10 modelos distintos) antes de calcular el precio relativo
-    const vistos = new Set();
-    let finalTop = [];
-    for (const a of candidatosConConcesionaria) {
-      if (!vistos.has(a.modelo) && finalTop.length < 10) {
-        vistos.add(a.modelo);
-        finalTop.push(a);
-      }
-    }
+    // 4.2. Cálculo de Precios Relativos (Sobre TODO el inventario rescatado)
+    const minPrice = Math.min(...candidatosConConcesionaria.map(a => a.precioUsd ?? 0));
+    const maxPrice = Math.max(...candidatosConConcesionaria.map(a => a.precioUsd ?? 0));
 
-    // Cálculo de Eficiencia de Precio (El más barato = 15 pts, el más caro = 0 pts)
-    const minPrice = Math.min(...finalTop.map(a => a.precioUsd ?? 0));
-    const maxPrice = Math.max(...finalTop.map(a => a.precioUsd ?? 0));
-
-    finalTop = finalTop.map(auto => {
-      let score = 70; // Base: Cumple filtros duros
-      if (auto.isConceMatch) score += 15; // Bono Concesionaria
+    // 4.3. Asignación de Puntaje Global (La evaluación real a TODO el stock)
+    let candidatosPuntuados = candidatosConConcesionaria.map(auto => {
+      let score = 70; // Base por pasar los hard filters (SQL)
+      
+      if (auto.isConceMatch) score += 15; // Bono Concesionaria / Preferencia
       
       const p = auto.precioUsd ?? 0;
       if (maxPrice === minPrice) {
@@ -131,9 +125,19 @@ export async function POST(req: Request) {
       return { ...auto, matchPercent: score };
     });
 
-    // Ordenamiento Final: Primero el de mayor Match Score, luego el más barato
-    finalTop.sort((a, b) => b.matchPercent - a.matchPercent || (a.precioUsd ?? 0) - (b.precioUsd ?? 0));
+    // 4.4. ORDENAMIENTO ABSOLUTO
+    // Primero los de mayor Match Score (la concesionaria elegida salta arriba), luego el más barato
+    candidatosPuntuados.sort((a, b) => b.matchPercent - a.matchPercent || (a.precioUsd ?? 0) - (b.precioUsd ?? 0));
 
+    // 4.5. EXTRACCIÓN DEL TOP 10 (Recorte de modelos únicos YA ORDENADOS)
+    const vistos = new Set();
+    let finalTop = [];
+    for (const a of candidatosPuntuados) {
+      if (!vistos.has(a.modelo) && finalTop.length < 10) {
+        vistos.add(a.modelo);
+        finalTop.push(a);
+      }
+    }
     // 5. IA: PIPELINE DE DATOS JSON (Análisis Comparativo con Hard-Prompting)
     let veredictosArray: any[] = [];
     if (finalTop.length > 0) {
