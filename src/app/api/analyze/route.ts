@@ -134,10 +134,7 @@ export async function POST(req: Request) {
     // Ordenamiento Final: Primero el de mayor Match Score, luego el más barato
     finalTop.sort((a, b) => b.matchPercent - a.matchPercent || (a.precioUsd ?? 0) - (b.precioUsd ?? 0));
 
-    // 5. IA: PIPELINE DE DATOS JSON (Análisis Comparativo)
-    let veredictosArray: any[] = [];
-    if (finalTop.length > 0) {
-      try {
+   try {
         // Enriquecemos el payload con atributos de Neon para que la IA compare
         const aiPayload = finalTop.map((a, index) => ({
           index,
@@ -151,9 +148,9 @@ export async function POST(req: Request) {
         }));
 
         const prompt = `Eres un Analista de Datos Senior de DATACAR. Analiza este JSON de ${finalTop.length} vehículos que ya cumplen los filtros del cliente (prioridades: ${attrs.join(', ')}).
-        COMPARA los vehículos entre sí. Escribe una justificación técnica de máximo 15 palabras para cada uno (ej: "La opción más económica del grupo", "Destaca por su baulera líder y seguridad ADAS").
+        COMPARA los vehículos entre sí. Escribe una justificación técnica de máximo 15 palabras para cada uno (ej: "La opción más económica del segmento", "Destaca por su baulera líder").
         REGLA ESTRICTA: NO menciones marcas ni modelos.
-        Devuelve ÚNICAMENTE un array JSON válido con este formato exacto: [{"index": 0, "veredicto": "tu frase comparativa"}, ...]
+        Devuelve ÚNICAMENTE un array JSON válido con este formato exacto: [{"index": 0, "veredicto": "tu frase comparativa"}]
         Datos a analizar: ${JSON.stringify(aiPayload)}`;
 
         const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
@@ -162,6 +159,22 @@ export async function POST(req: Request) {
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
         const aiData = await aiRes.json();
+        
+        const textResponse = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+        console.log(">>> [RAW IA]:", textResponse.substring(0, 100) + "..."); // Vemos qué escupe la IA
+        
+        // EXTRACCIÓN AGRESIVA: Buscamos el primer '[' y el último ']'
+        const match = textResponse.match(/\[[\s\S]*\]/);
+        
+        if (match) {
+          veredictosArray = JSON.parse(match[0]);
+          console.log(`>>> [IA JSON PARSED]: ${veredictosArray.length} veredictos extraídos correctamente.`);
+        } else {
+          console.warn(">>> [WARNING IA] No se detectó un array JSON. Fallback activado.");
+        }
+      } catch (e) {
+        console.error(">>> [ERROR PARSEO IA]:", e);
+      }
         
         // Extracción robusta del JSON de la IA (Limpia markdown si Gemini lo inyecta)
         let textResponse = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
