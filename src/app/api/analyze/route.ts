@@ -134,7 +134,10 @@ export async function POST(req: Request) {
     // Ordenamiento Final: Primero el de mayor Match Score, luego el más barato
     finalTop.sort((a, b) => b.matchPercent - a.matchPercent || (a.precioUsd ?? 0) - (b.precioUsd ?? 0));
 
-   try {
+    // 5. IA: PIPELINE DE DATOS JSON (Análisis Comparativo)
+    let veredictosArray: any[] = [];
+    if (finalTop.length > 0) {
+      try {
         // Enriquecemos el payload con atributos de Neon para que la IA compare
         const aiPayload = finalTop.map((a, index) => ({
           index,
@@ -174,14 +177,6 @@ export async function POST(req: Request) {
         }
       } catch (e) {
         console.error(">>> [ERROR PARSEO IA]:", e);
-      }
-        
-        // Extracción robusta del JSON de la IA (Limpia markdown si Gemini lo inyecta)
-        let textResponse = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
-        textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-        veredictosArray = JSON.parse(textResponse);
-      } catch (e) {
-        console.error(">>> [ERROR ARQUITECTURA] Falló el parseo JSON de la IA:", e);
       }
     }
 
