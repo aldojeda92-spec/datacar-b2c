@@ -134,7 +134,7 @@ export async function POST(req: Request) {
     // Ordenamiento Final: Primero el de mayor Match Score, luego el más barato
     finalTop.sort((a, b) => b.matchPercent - a.matchPercent || (a.precioUsd ?? 0) - (b.precioUsd ?? 0));
 
-    // 5. IA: PIPELINE DE DATOS JSON (Análisis Comparativo)
+    // 5. IA: PIPELINE DE DATOS JSON (Análisis Comparativo con Hard-Prompting)
     let veredictosArray: any[] = [];
     if (finalTop.length > 0) {
       try {
@@ -150,11 +150,27 @@ export async function POST(req: Request) {
           baulera: a.bauleraLitros
         }));
 
-        const prompt = `Eres un Analista de Datos Senior de DATACAR. Analiza este JSON de ${finalTop.length} vehículos que ya cumplen los filtros del cliente (prioridades: ${attrs.join(', ')}).
-        COMPARA los vehículos entre sí. Escribe una justificación técnica de máximo 15 palabras para cada uno (ej: "La opción más económica del segmento", "Destaca por su baulera líder").
-        REGLA ESTRICTA: NO menciones marcas ni modelos.
-        Devuelve ÚNICAMENTE un array JSON válido con este formato exacto: [{"index": 0, "veredicto": "tu frase comparativa"}]
-        Datos a analizar: ${JSON.stringify(aiPayload)}`;
+        // AUDITORÍA PRE-VUELO: Verificamos qué le estamos mandando a Google
+        console.log(`>>> [DEBUG PAYLOAD A GEMINI]: Enviando ${aiPayload.length} vehículos a analizar.`);
+
+        // PROMPT RE-ESTRUCTURADO (Anti-Alucinaciones y Anti-Pereza)
+        const prompt = `Actúa como Analista de Datos de DATACAR.
+        A continuación recibirás un array JSON con ${finalTop.length} vehículos.
+        
+        TAREA OBLIGATORIA: Escribe un 'veredicto' comparativo de máximo 15 palabras para CADA UNO de los vehículos basándote en sus atributos (precio, motor, baulera, plazas, etc.).
+        
+        REGLAS ESTRICTAS:
+        1. NO menciones marcas ni modelos bajo ninguna circunstancia.
+        2. Compara los vehículos entre sí (Ejemplos válidos: "Es la opción más económica del grupo", "Destaca por su baulera líder en capacidad", "El único con tecnología híbrida y ADAS completo").
+        3. DEBES generar exactamente ${finalTop.length} veredictos.
+        
+        Devuelve ÚNICAMENTE un array JSON válido, sin texto adicional, sin markdown y sin bloques de código, con esta estructura exacta:
+        [
+          {"index": <numero_de_index>, "veredicto": "<tu_frase_aqui>"}
+        ]
+        
+        JSON DE VEHÍCULOS A ANALIZAR:
+        ${JSON.stringify(aiPayload)}`;
 
         const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
           method: 'POST',
@@ -163,8 +179,13 @@ export async function POST(req: Request) {
         });
         const aiData = await aiRes.json();
         
+        // AUDITORÍA EXTREMA: Si Google no devuelve candidatos, escupimos el error completo
+        if (!aiData.candidates || aiData.candidates.length === 0) {
+          console.error(">>> [FATAL GEMINI API]: La IA no devolvió texto. Objeto completo:", JSON.stringify(aiData, null, 2));
+        }
+        
         const textResponse = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
-        console.log(">>> [RAW IA]:", textResponse.substring(0, 100) + "..."); // Vemos qué escupe la IA
+        console.log(">>> [RAW IA COMPLETO]:", textResponse); // Ahora vemos la respuesta entera, sin recortar
         
         // EXTRACCIÓN AGRESIVA: Buscamos el primer '[' y el último ']'
         const match = textResponse.match(/\[[\s\S]*\]/);
@@ -173,7 +194,7 @@ export async function POST(req: Request) {
           veredictosArray = JSON.parse(match[0]);
           console.log(`>>> [IA JSON PARSED]: ${veredictosArray.length} veredictos extraídos correctamente.`);
         } else {
-          console.warn(">>> [WARNING IA] No se detectó un array JSON. Fallback activado.");
+          console.warn(">>> [WARNING IA] No se detectó un array JSON en la respuesta. Fallback activado.");
         }
       } catch (e) {
         console.error(">>> [ERROR PARSEO IA]:", e);
