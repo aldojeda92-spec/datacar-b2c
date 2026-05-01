@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     const sMotorRaw = parseData(leadData.motorizacion).filter(isNotAll);
     const sMotorTarget = sMotorRaw.flatMap(m => motorMap[m] || [m]);
 
- // DICCIONARIO DE ORIGEN (Traductor Frontend -> DB)
+    // DICCIONARIO DE ORIGEN (Traductor Frontend -> DB)
     const origenMap: Record<string, string[]> = {
       'solo chinos': ['china', 'chino', 'prc'],
       'solo japoneses': ['japón', 'japon', 'japonés', 'japones'],
@@ -96,37 +96,65 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, top10: [] });
     }
 
-    // 4. ORDENAMIENTO POR CONCESIONARIA (SOFT FILTER)
-    const clasificados = candidatosEstrictos.map(auto => {
+    // 4. ALGORITMO DATACAR MATCH SCORE (Scoring Dinámico)
+    const candidatosConConcesionaria = candidatosEstrictos.map(auto => {
       const dbConce = (auto.concesionaria || "").toLowerCase();
-      // Verificamos si pidió una concesionaria específica o "todas"
       const isConceMatch = sConce.length === 0 || sConce.some(c => ['todas', 'todos'].includes(c)) || sConce.some(c => dbConce.includes(c));
-      return { ...auto, isConceMatch, matchPercent: isConceMatch ? 99 : 85 };
+      return { ...auto, isConceMatch };
     });
 
-    // Orden: Primero las que hacen match con la concesionaria, luego por precio de menor a mayor
-    const sorted = clasificados.sort((a, b) => {
-      if (a.isConceMatch === b.isConceMatch) return (a.precioUsd ?? 0) - (b.precioUsd ?? 0);
-      return a.isConceMatch ? -1 : 1;
-    });
-
-    // Unicidad (Top 10 modelos distintos)
+    // Unicidad (Top 10 modelos distintos) antes de calcular el precio relativo
     const vistos = new Set();
-    const finalTop: typeof sorted = [];
-    for (const a of sorted) {
+    let finalTop = [];
+    for (const a of candidatosConConcesionaria) {
       if (!vistos.has(a.modelo) && finalTop.length < 10) {
         vistos.add(a.modelo);
         finalTop.push(a);
       }
     }
 
-    // 5. IA: JUSTIFICACIÓN POR ATRIBUTOS
-    let veredictos: string[] = [];
+    // Cálculo de Eficiencia de Precio (El más barato = 15 pts, el más caro = 0 pts)
+    const minPrice = Math.min(...finalTop.map(a => a.precioUsd ?? 0));
+    const maxPrice = Math.max(...finalTop.map(a => a.precioUsd ?? 0));
+
+    finalTop = finalTop.map(auto => {
+      let score = 70; // Base: Cumple filtros duros
+      if (auto.isConceMatch) score += 15; // Bono Concesionaria
+      
+      const p = auto.precioUsd ?? 0;
+      if (maxPrice === minPrice) {
+        score += 15; // Si todos cuestan igual, todos ganan el bono
+      } else {
+        // Regla de tres inversa: a menor precio, mayor puntaje (hasta 15)
+        score += Math.round(15 * (1 - ((p - minPrice) / (maxPrice - minPrice))));
+      }
+      return { ...auto, matchPercent: score };
+    });
+
+    // Ordenamiento Final: Primero el de mayor Match Score, luego el más barato
+    finalTop.sort((a, b) => b.matchPercent - a.matchPercent || (a.precioUsd ?? 0) - (b.precioUsd ?? 0));
+
+    // 5. IA: PIPELINE DE DATOS JSON (Análisis Comparativo)
+    let veredictosArray: any[] = [];
     if (finalTop.length > 0) {
       try {
-        const prompt = `Actúa como consultor técnico automotriz. Justifica estos ${finalTop.length} autos para un cliente que prioriza: ${attrs.join(', ')}.
-        Escribe una frase de 15 palabras por auto. Una por línea. No nombres el modelo ni la marca.
-        Lista: ${finalTop.map(a => `${a.marca} ${a.modelo}: ${a.airbags} airbags, motor ${a.combustible}`).join('\n')}`;
+        // Enriquecemos el payload con atributos de Neon para que la IA compare
+        const aiPayload = finalTop.map((a, index) => ({
+          index,
+          precio: a.precioUsd,
+          motor: a.combustible,
+          airbags: a.airbags,
+          adas: a.adas ? "Equipado" : "Básico",
+          pantalla: a.tamanhoPantalla,
+          plazas: a.plazas,
+          baulera: a.bauleraLitros
+        }));
+
+        const prompt = `Eres un Analista de Datos Senior de DATACAR. Analiza este JSON de ${finalTop.length} vehículos que ya cumplen los filtros del cliente (prioridades: ${attrs.join(', ')}).
+        COMPARA los vehículos entre sí. Escribe una justificación técnica de máximo 15 palabras para cada uno (ej: "La opción más económica del grupo", "Destaca por su baulera líder y seguridad ADAS").
+        REGLA ESTRICTA: NO menciones marcas ni modelos.
+        Devuelve ÚNICAMENTE un array JSON válido con este formato exacto: [{"index": 0, "veredicto": "tu frase comparativa"}, ...]
+        Datos a analizar: ${JSON.stringify(aiPayload)}`;
 
         const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`, {
           method: 'POST',
@@ -134,31 +162,39 @@ export async function POST(req: Request) {
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
         const aiData = await aiRes.json();
-        const text = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        veredictos = text.split('\n').filter((l: string) => l.trim().length > 5);
+        
+        // Extracción robusta del JSON de la IA (Limpia markdown si Gemini lo inyecta)
+        let textResponse = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+        textResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+        veredictosArray = JSON.parse(textResponse);
       } catch (e) {
-        console.warn("Fallo IA");
+        console.error(">>> [ERROR ARQUITECTURA] Falló el parseo JSON de la IA:", e);
       }
     }
 
-    // 6. RESPUESTA FINAL
+    // 6. RESPUESTA FINAL MAPEDA
     const top10 = await Promise.all(finalTop.map(async (auto, i) => {
       const vRaw = await db.query.catalogoMatriz.findMany({
         where: eq(catalogoMatriz.modelo, auto.modelo ?? ""),
         orderBy: [catalogoMatriz.precioUsd]
       });
 
+      // Aseguramos emparejar el veredicto correcto por su índice
+      const veredictoObj = veredictosArray.find((v: any) => v.index === i);
+
       return {
         ...auto,
         match_percent: auto.matchPercent,
-        veredicto: veredictos[i]?.trim() || "Cumple 100% con tu configuración estricta de carrocería, motorización, origen y presupuesto.",
+        veredicto: veredictoObj?.veredicto || "Opción destacada que cumple estrictamente con tu configuración y presupuesto.",
         versiones: vRaw.map(v => ({ ...v, match_percent: auto.matchPercent }))
       };
     }));
 
+    console.log(`>>> [ARQUITECTURA] Pipeline Completado con Match Dinámico en ${Date.now() - start}ms`);
     return NextResponse.json({ success: true, top10 });
 
   } catch (error: any) {
+    console.error(">>> [FATAL ERROR]:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
