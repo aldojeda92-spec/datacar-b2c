@@ -34,6 +34,8 @@ interface IAAuto {
   concesionaria?: string;
   veredicto: string; 
   versiones: any[];
+  // NUEVO CAMPO AÑADIDO (Temporalmente mapeado a subsegmento en BD)
+  subsegmento?: string; 
 }
 
 const PEDIR_DATOS_USUARIO = false; 
@@ -65,7 +67,7 @@ export default function WizardContainer() {
     nombre: PEDIR_DATOS_USUARIO ? '' : 'Invitado', 
     celular: PEDIR_DATOS_USUARIO ? '' : '0999999999', 
     email: '', 
-    presupuestoMin: 20000, 
+    presupuestoMin: 8000, 
     presupuestoMax: 50000,
     atributos: [] as string[], 
     motorizacion: [] as string[], 
@@ -150,10 +152,8 @@ export default function WizardContainer() {
   // Lógica de impresión con Lead Magnet
   const handlePrintRequest = () => {
     if (formData.nombre === 'Invitado') {
-      // Si entró gratis, levantamos el modal para capturar sus datos
       setShowLeadModal(true);
     } else {
-      // Si ya puso sus datos, imprime directo
       setTimeout(() => window.print(), 100);
     }
   };
@@ -161,10 +161,8 @@ export default function WizardContainer() {
   const handleUnlockDossier = async () => {
     setIsSavingLead(true);
     try {
-      // Actualizamos el lead en la BD con los datos reales
       await saveLeadAction(formData); 
       setShowLeadModal(false);
-      // Damos 300ms para que React actualice el nombre en la vista del PDF antes de imprimir
       setTimeout(() => window.print(), 300);
     } catch (error) {
       console.error(error);
@@ -198,6 +196,16 @@ export default function WizardContainer() {
   const displayedAutos = [...manualSelections, ...top10].filter((auto, index, self) =>
     index === self.findIndex((a) => a.id === auto.id)
   );
+
+  // FUNCIÓN FILTRO DE BASURA PARA PROMOCIONES
+  const getPromocionValida = (valor?: string) => {
+    if (!valor) return null;
+    const cleanValue = valor.trim().toLowerCase();
+    if (cleanValue === "" || cleanValue === "0" || cleanValue === "n/a" || cleanValue === "null" || cleanValue === "none") {
+      return null;
+    }
+    return valor.trim();
+  };
 
   const MultiSelect = ({ label, items, value, storeKey }: { label: string, items: string[], value: string[], storeKey: any }) => (
     <div className="space-y-1 relative">
@@ -239,12 +247,12 @@ export default function WizardContainer() {
   if (showComparison) {
     const selected = displayedAutos.filter(a => compareIds.includes(a.id));
     const autoRecomendado = selected.length > 0 ? (activeVersions[selected[0].id] || selected[0]) : null;
-    const opcionesExtra = top10.filter(a => !compareIds.includes(a.id)).slice(0, 3); // Tomamos 3
+    const opcionesExtra = top10.filter(a => !compareIds.includes(a.id)).slice(0, 3); 
 
     return (
       <div className="font-inter">
         
-        {/* MODAL DE LEAD MAGNET (Solo se muestra si el usuario quiso imprimir y era Invitado) */}
+        {/* MODAL DE LEAD MAGNET */}
         {showLeadModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0A1F33]/90 p-4 animate-in fade-in duration-300 print:hidden">
             <div className="bg-white max-w-md w-full p-8 shadow-2xl relative">
@@ -323,9 +331,19 @@ export default function WizardContainer() {
                   </div>
                   {selected.map(auto => {
                      const currentAuto = activeVersions[auto.id] || auto;
+                     const promoValida = getPromocionValida(currentAuto.subsegmento);
+
                      return (
-                      <div key={auto.id} className="p-2 text-center space-y-1.5 bg-white border-x flex flex-col justify-between">
-                        <div className="h-12 flex items-center justify-center"> 
+                      <div key={auto.id} className="p-2 text-center space-y-1.5 bg-white border-x flex flex-col justify-between relative">
+                        {/* INYECCIÓN CRO: BADGE DE PROMOCIÓN */}
+                        {promoValida && (
+                          <div className="absolute top-2 left-0 right-0 z-10 flex justify-center">
+                            <span className="bg-[#00BFFF] text-[#0A1F33] font-black text-[8px] uppercase px-2 py-0.5 rounded shadow-sm">
+                              {promoValida}
+                            </span>
+                          </div>
+                        )}
+                        <div className="h-12 flex items-center justify-center mt-2"> 
                           <img src={currentAuto.urlImagen} className="max-h-full object-contain mx-auto" alt={currentAuto.modelo} />
                         </div>
                         <div className="leading-tight">
@@ -408,8 +426,14 @@ export default function WizardContainer() {
             </header>
 
             {/* RECOMENDACIÓN PRINCIPAL */}
-            <section className="bg-slate-50 p-4 mb-6 border-l-4 border-[#0A1F33] break-inside-avoid">
-              <div className="flex items-start gap-4">
+            <section className="bg-slate-50 p-4 mb-6 border-l-4 border-[#0A1F33] break-inside-avoid relative">
+              {/* INYECCIÓN CRO EN PDF: BADGE DE PROMOCIÓN */}
+              {getPromocionValida(autoRecomendado.subsegmento) && (
+                 <div className="absolute -top-3 right-4 bg-[#0A1F33] text-[#00BFFF] font-black text-[9px] uppercase px-3 py-1 shadow-sm border-b-2 border-[#00BFFF]">
+                   {getPromocionValida(autoRecomendado.subsegmento)}
+                 </div>
+              )}
+              <div className="flex items-start gap-4 mt-2">
                 <div className="flex-1">
                   <h3 className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-1">⭐ Selección a Medida</h3>
                   <h4 className="text-xl font-montserrat font-black uppercase leading-none mb-1 text-[#0A1F33]">
@@ -468,7 +492,7 @@ export default function WizardContainer() {
               </table>
             </section>
 
-            {/* OPCIONES EXTRA (Con Badges Técnicos) */}
+            {/* OPCIONES EXTRA */}
             {opcionesExtra.length > 0 && (
               <section className="mb-6 break-inside-avoid">
                 <h3 className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-2">Otras opciones que cumplen tu perfil:</h3>
@@ -480,7 +504,6 @@ export default function WizardContainer() {
                         <h4 className="font-black text-[10px] uppercase text-[#0A1F33] leading-none">{auto.marca} <span className="font-medium text-[9px] text-slate-500">{auto.modelo}</span></h4>
                         <p className="text-[9px] font-black text-[#0A1F33] mt-0.5 mb-1">${auto.precioUsd?.toLocaleString()}</p>
                         
-                        {/* Píldoras Técnicas */}
                         <div className="flex flex-wrap gap-1">
                           {auto.motor && <span className="px-1 py-0.5 bg-slate-100 text-[6px] font-bold text-slate-500 uppercase rounded-sm">{auto.motor.slice(0, 15)}</span>}
                           {auto.bauleraLitros && <span className="px-1 py-0.5 bg-slate-100 text-[6px] font-bold text-slate-500 uppercase rounded-sm">{auto.bauleraLitros}L</span>}
@@ -522,7 +545,7 @@ export default function WizardContainer() {
   return (
     <div className={`min-h-screen font-inter ${step === 2 ? 'bg-[#F8FAFC]' : 'bg-white'}`}>
       
-      {/* HEADER WEB CORREGIDO (Manual de Marca) */}
+      {/* HEADER WEB CORREGIDO */}
       <div className="max-w-[1600px] mx-auto p-10 flex justify-between items-center">
         <h1 className="text-3xl font-montserrat font-black text-[#0A1F33] uppercase">
           DATA<span className="font-light text-[#3A3A3C] tracking-normal">CAR</span>
@@ -571,9 +594,10 @@ export default function WizardContainer() {
                 </div>
               </div>
               <div className="relative w-full h-1 bg-slate-100 rounded-full">
-                <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${(formData.presupuestoMin / 200000) * 100}%`, right: `${100 - (formData.presupuestoMax / 200000) * 100}%` }} />
-                <input type="range" min="0" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
-                <input type="range" min="0" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                {/* Matemáticas ajustadas para que el input arranque en 8000 en vez de 0 */}
+                <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
+                <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
               </div>
             </div>
 
@@ -676,17 +700,32 @@ export default function WizardContainer() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-10">
             {displayedAutos.map((auto, idx) => {
               const currentAuto = activeVersions[auto.id] || auto;
+              
+              // EJECUCIÓN CRO: Validamos si hay promoción limpia para inyectar el Banner de urgencia
+              const promoValida = getPromocionValida(currentAuto.subsegmento);
+
               return (
                 <div key={auto.id} className={`bg-white border flex flex-col transition-all relative ${compareIds.includes(auto.id) ? 'border-[#00BFFF] ring-4 ring-[#00BFFF]/10' : 'border-slate-100 shadow-sm'}`}>
-                  {auto.puesto ? (
-                    <div className="absolute -top-3 -left-3 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-10 shadow-lg">{auto.puesto}</div>
-                  ) : (
-                    <div className="absolute -top-3 -left-3 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-10 shadow-lg text-lg">+</div>
+                  
+                  {/* INYECCIÓN DE BANNER PROMOCIONAL (Top de la tarjeta) */}
+                  {promoValida && (
+                    <div className="absolute -top-3 right-0 left-0 flex justify-center z-20 pointer-events-none">
+                      <div className="bg-[#00BFFF] text-[#0A1F33] text-[9px] font-black uppercase tracking-widest px-4 py-1 shadow-md border border-[#0A1F33]/10">
+                        {promoValida}
+                      </div>
+                    </div>
                   )}
 
-                  <div className="relative h-56 bg-slate-50 overflow-hidden border-b border-slate-100">
+                  {/* Etiqueta de puesto ajustada en Z-Index */}
+                  {auto.puesto ? (
+                    <div className="absolute -top-3 -left-3 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-lg">{auto.puesto}</div>
+                  ) : (
+                    <div className="absolute -top-3 -left-3 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-lg text-lg">+</div>
+                  )}
+
+                  <div className={`relative h-56 bg-slate-50 overflow-hidden border-b border-slate-100 ${promoValida ? 'mt-2' : ''}`}>
                     <img src={currentAuto.urlImagen} className="w-full h-full object-cover" alt={currentAuto.modelo} />
-                    <button onClick={() => toggleCompare(auto.id)} className={`absolute top-4 right-4 px-3 py-1 text-[8px] font-black border transition-colors ${compareIds.includes(auto.id) ? 'bg-[#00BFFF] text-white border-[#00BFFF]' : 'bg-white/90 text-slate-500 border-slate-200 hover:text-[#0A1F33]'}`}>
+                    <button onClick={() => toggleCompare(auto.id)} className={`absolute top-4 right-4 px-3 py-1 text-[8px] font-black border transition-colors z-30 ${compareIds.includes(auto.id) ? 'bg-[#00BFFF] text-white border-[#00BFFF]' : 'bg-white/90 text-slate-500 border-slate-200 hover:text-[#0A1F33]'}`}>
                       {compareIds.includes(auto.id) ? '✓ SELECCIONADO' : '+ COMPARAR'}
                     </button>
                   </div>
