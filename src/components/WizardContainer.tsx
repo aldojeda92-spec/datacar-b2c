@@ -724,32 +724,25 @@ export default function WizardContainer() {
               const isVIP = top3Ids.has(auto.id);
 
               return (
-                <div key={auto.id} className={`flex flex-col transition-all relative overflow-hidden ${isVIP ? 'bg-gradient-to-b from-slate-100 to-white border-2 border-[#00BFFF] shadow-md' : 'bg-white border border-slate-100 shadow-sm'} ${compareIds.includes(auto.id) ? 'ring-4 ring-[#00BFFF]/20' : ''}`}>
+                <div key={auto.id} className={`flex flex-col transition-all relative overflow-hidden ${isVIP ? 'bg-gradient-to-b from-slate-100 to-white border-2 border-[#0A1F33] shadow-md' : 'bg-white border border-slate-100 shadow-sm'} ${compareIds.includes(auto.id) ? 'ring-4 ring-[#00BFFF]/20' : ''}`}>
                   
-                  {/* Etiqueta obligatoria de transparencia B2B (Solo para Ad Slots VIP) */}
-                  {isVIP && (
-                    <div className="absolute top-0 right-0 bg-[#0A1F33] text-white text-[7px] font-black uppercase tracking-[0.2em] px-2 py-0.5 z-30 rounded-bl-sm shadow-sm">
-                      Sugerencia Comercial
+                  {/* NUEVO HEADER CORPORATIVO VIP (Libera la foto) */}
+                  {isVIP && promoValida && (
+                    <div className="bg-[#0A1F33] w-full px-4 py-2.5 flex flex-col items-center justify-center relative z-20 border-b-2 border-[#00BFFF]">
+                      <span className="text-slate-400 text-[6px] font-black uppercase tracking-[0.2em] mb-0.5">Sugerencia Comercial</span>
+                      <span className="text-[#00BFFF] text-[10px] font-black uppercase tracking-widest text-center">{promoValida}</span>
                     </div>
                   )}
 
-                  {/* INYECCIÓN DE BANNER PROMOCIONAL (Solo si es VIP) */}
-                  {promoValida && isVIP && (
-                    <div className="absolute top-4 right-0 left-0 flex justify-center z-20 pointer-events-none">
-                      <div className="bg-[#00BFFF] text-[#0A1F33] text-[9px] font-black uppercase tracking-widest px-4 py-1 shadow-md border border-[#0A1F33]/10">
-                        {promoValida}
-                      </div>
-                    </div>
-                  )}
+                  <div className="relative h-56 bg-slate-50 overflow-hidden border-b border-slate-100 mt-0">
+                    
+                    {/* Etiqueta de puesto reubicada dentro de la foto para no chocar con el Header */}
+                    {auto.puesto ? (
+                      <div className="absolute top-0 left-0 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-br">{auto.puesto}</div>
+                    ) : (
+                      <div className="absolute top-0 left-0 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-br text-lg">+</div>
+                    )}
 
-                  {/* Etiqueta de puesto ajustada en Z-Index. Mantiene el puesto orgánico para transparencia */}
-                  {auto.puesto ? (
-                    <div className="absolute -top-3 -left-3 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-lg">{auto.puesto}</div>
-                  ) : (
-                    <div className="absolute -top-3 -left-3 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-lg text-lg">+</div>
-                  )}
-
-                  <div className={`relative h-56 bg-slate-50 overflow-hidden border-b border-slate-100 ${(promoValida && isVIP) ? 'mt-3' : ''}`}>
                     <img src={currentAuto.urlImagen} className="w-full h-full object-cover" alt={currentAuto.modelo} />
                     <button onClick={() => toggleCompare(auto.id)} className={`absolute top-4 right-4 px-3 py-1 text-[8px] font-black border transition-colors z-30 ${compareIds.includes(auto.id) ? 'bg-[#00BFFF] text-white border-[#00BFFF]' : 'bg-white/90 text-slate-500 border-slate-200 hover:text-[#0A1F33]'}`}>
                       {compareIds.includes(auto.id) ? '✓ SELECCIONADO' : '+ COMPARAR'}
