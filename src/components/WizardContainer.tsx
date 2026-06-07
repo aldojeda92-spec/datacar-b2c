@@ -34,7 +34,7 @@ interface IAAuto {
   concesionaria?: string;
   veredicto: string; 
   versiones: any[];
-  // NUEVO CAMPO AÑADIDO (Temporalmente mapeado a subsegmento en BD)
+  // CAMPO PROMOCIONAL
   subsegmento?: string; 
 }
 
@@ -149,7 +149,6 @@ export default function WizardContainer() {
     window.scrollTo(0, 0);
   };
 
-  // Lógica de impresión con Lead Magnet
   const handlePrintRequest = () => {
     if (formData.nombre === 'Invitado') {
       setShowLeadModal(true);
@@ -193,11 +192,9 @@ export default function WizardContainer() {
     return () => clearTimeout(delayFn);
   }, [searchTerm]);
 
-  const displayedAutos = [...manualSelections, ...top10].filter((auto, index, self) =>
-    index === self.findIndex((a) => a.id === auto.id)
-  );
-
-  // FUNCIÓN FILTRO DE BASURA PARA PROMOCIONES
+  // ============================================================================
+  // LOGICA CRO: FILTRO Y EXTRACCIÓN DE AD SLOTS (MÁXIMO 3)
+  // ============================================================================
   const getPromocionValida = (valor?: string) => {
     if (!valor) return null;
     const cleanValue = valor.trim().toLowerCase();
@@ -206,6 +203,27 @@ export default function WizardContainer() {
     }
     return valor.trim();
   };
+
+  const uniqueAutos = [...manualSelections, ...top10].filter((auto, index, self) =>
+    index === self.findIndex((a) => a.id === auto.id)
+  );
+
+  // Extraemos todos los autos que califican para promoción
+  const allPromotedAutos = uniqueAutos.filter(auto => {
+    const currentAuto = activeVersions[auto.id] || auto;
+    return getPromocionValida(currentAuto.subsegmento) !== null;
+  });
+
+  // Limitamos a un máximo de 3 Ad Slots para mantener el balance orgánico
+  const top3Promoted = allPromotedAutos.slice(0, 3);
+  const top3Ids = new Set(top3Promoted.map(a => a.id));
+
+  // El resto de los vehículos (orgánicos + cualquier promocionado excedente)
+  const remainingAutos = uniqueAutos.filter(auto => !top3Ids.has(auto.id));
+
+  // Unificamos: Los Ad Slots primero, seguidos del contenido orgánico normal
+  const displayedAutos = [...top3Promoted, ...remainingAutos];
+  // ============================================================================
 
   const MultiSelect = ({ label, items, value, storeKey }: { label: string, items: string[], value: string[], storeKey: any }) => (
     <div className="space-y-1 relative">
@@ -700,30 +718,38 @@ export default function WizardContainer() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-10">
             {displayedAutos.map((auto, idx) => {
               const currentAuto = activeVersions[auto.id] || auto;
-              
-              // EJECUCIÓN CRO: Validamos si hay promoción limpia para inyectar el Banner de urgencia
               const promoValida = getPromocionValida(currentAuto.subsegmento);
+              
+              // Verificamos si este auto fue seleccionado para ocupar un Ad Slot (está en los top 3 promocionados)
+              const isVIP = top3Ids.has(auto.id);
 
               return (
-                <div key={auto.id} className={`bg-white border flex flex-col transition-all relative ${compareIds.includes(auto.id) ? 'border-[#00BFFF] ring-4 ring-[#00BFFF]/10' : 'border-slate-100 shadow-sm'}`}>
+                <div key={auto.id} className={`flex flex-col transition-all relative overflow-hidden ${isVIP ? 'bg-gradient-to-b from-slate-100 to-white border-2 border-[#00BFFF] shadow-md' : 'bg-white border border-slate-100 shadow-sm'} ${compareIds.includes(auto.id) ? 'ring-4 ring-[#00BFFF]/20' : ''}`}>
                   
-                  {/* INYECCIÓN DE BANNER PROMOCIONAL (Top de la tarjeta) */}
-                  {promoValida && (
-                    <div className="absolute -top-3 right-0 left-0 flex justify-center z-20 pointer-events-none">
+                  {/* Etiqueta obligatoria de transparencia B2B (Solo para Ad Slots VIP) */}
+                  {isVIP && (
+                    <div className="absolute top-0 right-0 bg-[#0A1F33] text-white text-[7px] font-black uppercase tracking-[0.2em] px-2 py-0.5 z-30 rounded-bl-sm shadow-sm">
+                      Sugerencia Comercial
+                    </div>
+                  )}
+
+                  {/* INYECCIÓN DE BANNER PROMOCIONAL (Solo si es VIP) */}
+                  {promoValida && isVIP && (
+                    <div className="absolute top-4 right-0 left-0 flex justify-center z-20 pointer-events-none">
                       <div className="bg-[#00BFFF] text-[#0A1F33] text-[9px] font-black uppercase tracking-widest px-4 py-1 shadow-md border border-[#0A1F33]/10">
                         {promoValida}
                       </div>
                     </div>
                   )}
 
-                  {/* Etiqueta de puesto ajustada en Z-Index */}
+                  {/* Etiqueta de puesto ajustada en Z-Index. Mantiene el puesto orgánico para transparencia */}
                   {auto.puesto ? (
                     <div className="absolute -top-3 -left-3 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-lg">{auto.puesto}</div>
                   ) : (
                     <div className="absolute -top-3 -left-3 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-lg text-lg">+</div>
                   )}
 
-                  <div className={`relative h-56 bg-slate-50 overflow-hidden border-b border-slate-100 ${promoValida ? 'mt-2' : ''}`}>
+                  <div className={`relative h-56 bg-slate-50 overflow-hidden border-b border-slate-100 ${(promoValida && isVIP) ? 'mt-3' : ''}`}>
                     <img src={currentAuto.urlImagen} className="w-full h-full object-cover" alt={currentAuto.modelo} />
                     <button onClick={() => toggleCompare(auto.id)} className={`absolute top-4 right-4 px-3 py-1 text-[8px] font-black border transition-colors z-30 ${compareIds.includes(auto.id) ? 'bg-[#00BFFF] text-white border-[#00BFFF]' : 'bg-white/90 text-slate-500 border-slate-200 hover:text-[#0A1F33]'}`}>
                       {compareIds.includes(auto.id) ? '✓ SELECCIONADO' : '+ COMPARAR'}
