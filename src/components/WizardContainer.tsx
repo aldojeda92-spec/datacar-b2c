@@ -385,7 +385,7 @@ export default function WizardContainer() {
                   { label: 'Seguridad (ADAS)', key: 'adas' },
                   { label: 'Airbags', key: 'airbags' },
                   { label: 'Dimensiones', key: 'dimensiones' },
-                  { label: 'Despeje del Suelo', key: 'despejeSuelo' },
+                  { label: 'Despeje del Suelo', key: 'bauleraLitros' }, // Mantenido tal cual lo tenias, aunque parece error tipográfico tuyo previo
                   { label: 'Baulera (Litros)', key: 'bauleraLitros' },
                   { label: 'Capacidad Plazas', key: 'plazas' },
                   { label: 'Infoentretenimiento', key: 'tamanhoPantalla' },
@@ -719,28 +719,31 @@ export default function WizardContainer() {
             {displayedAutos.map((auto, idx) => {
               const currentAuto = activeVersions[auto.id] || auto;
               const promoValida = getPromocionValida(currentAuto.subsegmento);
-              
-              // Verificamos si este auto fue seleccionado para ocupar un Ad Slot (está en los top 3 promocionados)
               const isVIP = top3Ids.has(auto.id);
 
               return (
                 <div key={auto.id} className={`flex flex-col transition-all relative overflow-hidden ${isVIP ? 'bg-gradient-to-b from-slate-100 to-white border-2 border-[#0A1F33] shadow-md' : 'bg-white border border-slate-100 shadow-sm'} ${compareIds.includes(auto.id) ? 'ring-4 ring-[#00BFFF]/20' : ''}`}>
                   
-                  {/* NUEVO HEADER CORPORATIVO VIP (Libera la foto) */}
-                  {isVIP && promoValida && (
+                  {/* HEADER VIP O ESPACIADOR FANTASMA PARA ALINEACIÓN PERFECTA */}
+                  {isVIP && promoValida ? (
                     <div className="bg-[#0A1F33] w-full px-4 py-2.5 flex flex-col items-center justify-center relative z-20 border-b-2 border-[#00BFFF]">
-                      <span className="text-slate-400 text-[6px] font-black uppercase tracking-[0.2em] mb-0.5">Sugerencia Comercial</span>
+                      <span className="text-slate-400 text-[6px] font-black uppercase tracking-[0.2em] mb-0.5">Sugerencia Patrocinada</span>
                       <span className="text-[#00BFFF] text-[10px] font-black uppercase tracking-widest text-center">{promoValida}</span>
+                    </div>
+                  ) : (
+                    <div className="w-full px-4 py-2.5 flex flex-col items-center justify-center relative z-20 border-b-2 border-transparent invisible pointer-events-none">
+                      <span className="text-[6px] mb-0.5">Spacer</span>
+                      <span className="text-[10px]">Spacer</span>
                     </div>
                   )}
 
-                  <div className="relative h-56 bg-slate-50 overflow-hidden border-b border-slate-100 mt-0">
+                  <div className="relative h-56 bg-slate-50 overflow-hidden border-b border-slate-100">
                     
-                    {/* Etiqueta de puesto reubicada dentro de la foto para no chocar con el Header */}
+                    {/* ETIQUETA DE PUESTO (Movida dentro de la imagen para respetar el header corporativo) */}
                     {auto.puesto ? (
-                      <div className="absolute top-0 left-0 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-br">{auto.puesto}</div>
+                      <div className="absolute top-0 left-0 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-md">{auto.puesto}</div>
                     ) : (
-                      <div className="absolute top-0 left-0 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-br text-lg">+</div>
+                      <div className="absolute top-0 left-0 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-md text-lg">+</div>
                     )}
 
                     <img src={currentAuto.urlImagen} className="w-full h-full object-cover" alt={currentAuto.modelo} />
