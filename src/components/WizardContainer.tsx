@@ -119,6 +119,7 @@ export default function WizardContainer() {
   const handleExecute = async () => {
     setIsAnalyzing(true);
     try {
+      // PASO 1 (Regla 1): Al no pasarle un "id" en formData, el backend siempre creará un registro NUEVO ("Invitado")
       const result = await saveLeadAction(formData);
       if (result.success && result.leadId) {
         setCurrentLeadId(result.leadId);
@@ -142,6 +143,7 @@ export default function WizardContainer() {
     const selected = displayedAutos.filter(a => compareIds.includes(a.id));
     const nombres = selected.map(a => `${a.marca} ${a.modelo}`).join(' vs ');
     const leadIdToUse = currentLeadId || localStorage.getItem('datacar_lead_id');
+    // PASO 2 (Regla 2): Se asocia la comparativa al LeadID generado arriba
     if (leadIdToUse && compareIds.length >= 2) {
       await logComparisonAction({ leadId: leadIdToUse, vIds: compareIds, nombres: nombres });
     }
@@ -160,7 +162,14 @@ export default function WizardContainer() {
   const handleUnlockDossier = async () => {
     setIsSavingLead(true);
     try {
-      await saveLeadAction(formData); 
+      // PASO 3 (Regla 3): Rescatamos el ID de la sesión actual e INYECTAMOS para forzar el UPDATE
+      const idGuardado = currentLeadId || localStorage.getItem('datacar_lead_id');
+      
+      await saveLeadAction({
+        ...formData,
+        id: idGuardado
+      }); 
+      
       setShowLeadModal(false);
       setTimeout(() => window.print(), 300);
     } catch (error) {
@@ -697,7 +706,7 @@ export default function WizardContainer() {
                           alert("Solo puedes comparar hasta 3 vehículos a la vez. Deselecciona uno de la grilla primero.");
                         }
                         setSearchTerm('');
-                        setSearchResults([]);
+                        searchResults([]);
                       }}
                       className="p-4 border-b border-slate-50 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-colors"
                     >
