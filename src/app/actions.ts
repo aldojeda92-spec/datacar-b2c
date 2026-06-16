@@ -6,6 +6,32 @@ import { eq } from 'drizzle-orm';
 
 export async function saveLeadAction(formData: any): Promise<{ success: boolean; leadId?: string }> {
   try {
+    // REGLA 3: Si recibimos un ID desde el frontend (Paso 3), ACTUALIZAMOS al invitado actual.
+    if (formData.id) {
+      const [updatedLead] = await db.update(leads)
+        .set({
+          nombre: formData.nombre,
+          celular: formData.celular,
+          email: formData.email || null,
+          presupuestoMin: formData.presupuestoMin,
+          presupuestoMax: formData.presupuestoMax,
+          atributos: formData.atributos,
+          motorizacion: formData.motorizacion,
+          tipoVehiculo: formData.tipoVehiculo,
+          origen: formData.origen,
+          concesionariaPreferencia: formData.concesionaria,
+          notas: formData.notas || '',
+        })
+        .where(eq(leads.id, formData.id))
+        .returning();
+
+      // Si se actualizó con éxito, devolvemos el mismo ID para mantener la sesión
+      if (updatedLead) {
+        return { success: true, leadId: updatedLead.id };
+      }
+    }
+
+    // REGLA 1: Si no hay ID (Paso 1), CREAMOS SIEMPRE un Lead nuevo ("Invitado").
     const [newLead] = await db.insert(leads).values({
       nombre: formData.nombre,
       celular: formData.celular,
@@ -27,6 +53,7 @@ export async function saveLeadAction(formData: any): Promise<{ success: boolean;
   }
 }
 
+// REGLA 2: Esta función queda intacta, ya asocia correctamente los autos al ID que le pases.
 export async function logComparisonAction(data: {
   leadId: string, 
   vIds: string[], 
