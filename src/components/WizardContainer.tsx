@@ -706,7 +706,7 @@ export default function WizardContainer() {
                           alert("Solo puedes comparar hasta 3 vehículos a la vez. Deselecciona uno de la grilla primero.");
                         }
                         setSearchTerm('');
-                        searchResults([]);
+                        setsearchResults([]);
                       }}
                       className="p-4 border-b border-slate-50 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-colors"
                     >
