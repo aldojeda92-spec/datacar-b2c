@@ -1,11 +1,7 @@
 // src/app/api/analyze-similar/route.ts
 import { NextResponse } from 'next/server';
-import { Pool } from 'pg';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+import { db } from '@/lib/db';
+import { sql } from 'drizzle-orm';
 
 export async function POST(request: Request) {
   try {
@@ -21,13 +17,17 @@ export async function POST(request: Request) {
     // ==========================================
     // FASE 1: Extraer el ADN del Auto Ancla
     // ==========================================
-    const anclaQuery = await pool.query('SELECT * FROM catalogo_matriz WHERE id = $1 LIMIT 1', [autoAnclaId]);
+    // Usamos sql paramétrico de Drizzle para evitar SQL Injection
+    const anclaResult = await db.execute(sql`SELECT * FROM catalogo_matriz WHERE id = ${autoAnclaId} LIMIT 1`);
     
-    if (anclaQuery.rowCount === 0) {
+    // Dependiendo del driver exacto de Neon, los datos vienen en .rows o directo en el array
+    const anclaRows: any[] = (anclaResult as any).rows || anclaResult;
+
+    if (!anclaRows || anclaRows.length === 0) {
       return NextResponse.json({ success: false, error: 'Auto ancla no encontrado en la base de datos' }, { status: 404 });
     }
 
-    const ancla = anclaQuery.rows[0];
+    const ancla = anclaRows[0];
     const precioBase = parseFloat(ancla.precio_usd) || 0;
     const tipoCarroceria = ancla.tipo_carroceria || '';
     const subsegmento = ancla.subsegmento || '';
@@ -37,45 +37,48 @@ export async function POST(request: Request) {
     // ==========================================
     let esRescate = false;
     
+    const precioMin1 = precioBase * 0.85;
+    const precioMax1 = precioBase * 1.15;
+
     // Intento 1: Mismo subsegmento o carrocería, Precio +/- 15%
-    let query = `
+    let result = await db.execute(sql`
       SELECT * FROM catalogo_matriz 
-      WHERE id != $1 
-      AND precio_usd >= $2 AND precio_usd <= $3 
-      AND (subsegmento = $4 OR tipo_carroceria = $5)
-    `;
-    let values = [autoAnclaId, precioBase * 0.85, precioBase * 1.15, subsegmento, tipoCarroceria];
-    
-    let result = await pool.query(query, values);
+      WHERE id != ${autoAnclaId} 
+      AND precio_usd >= ${precioMin1} AND precio_usd <= ${precioMax1} 
+      AND (subsegmento = ${subsegmento} OR tipo_carroceria = ${tipoCarroceria})
+    `);
+
+    let resultRows: any[] = (result as any).rows || result;
 
     // Intento 2 (Modo Rescate): Si hay menos de 3 competidores, ampliamos la espiral
-    if (result.rowCount < 3) {
+    if (resultRows.length < 3) {
       esRescate = true;
-      query = `
+      const precioMin2 = precioBase * 0.70;
+      const precioMax2 = precioBase * 1.30;
+      
+      result = await db.execute(sql`
         SELECT * FROM catalogo_matriz 
-        WHERE id != $1 
-        AND precio_usd >= $2 AND precio_usd <= $3 
-        AND tipo_carroceria = $4
-      `;
-      // Ampliamos el precio a +/- 30% y solo exigimos misma carrocería general
-      values = [autoAnclaId, precioBase * 0.70, precioBase * 1.30, tipoCarroceria];
-      result = await pool.query(query, values);
+        WHERE id != ${autoAnclaId} 
+        AND precio_usd >= ${precioMin2} AND precio_usd <= ${precioMax2} 
+        AND tipo_carroceria = ${tipoCarroceria}
+      `);
+      resultRows = (result as any).rows || result;
     }
 
     // ==========================================
     // FASE 3: Sistema de Puntuación Dinámica
     // ==========================================
-    let candidatos = result.rows.map(auto => {
+    let candidatos = resultRows.map((auto: any) => {
       let score = 70; // Puntaje base por pertenecer a la misma categoría/rango de precio
 
       const precioAuto = parseFloat(auto.precio_usd) || 0;
       const bauleraAuto = parseInt(auto.baulera_litros) || 0;
       const bauleraAncla = parseInt(ancla.baulera_litros) || 0;
 
-      // Premio por PRECIO: Si es más barato que el ancla
+      // Premio por PRECIO
       if (attrs.includes('Precio') && precioAuto <= precioBase) score += 15;
       
-      // Premio por ESPACIO: Si tiene más baulera o es más largo
+      // Premio por ESPACIO
       if (attrs.includes('Espacio')) {
         if (bauleraAuto > bauleraAncla) score += 10;
         if (auto.largo > ancla.largo) score += 5;
@@ -133,15 +136,15 @@ export async function POST(request: Request) {
         concesionaria: auto.concesionaria,
         subsegmento: auto.subsegmento,
         veredicto: veredicto.trim(),
-        versiones: [] // Mantenemos compatibilidad con tu interfaz
+        versiones: []
       };
     });
 
     // Ordenamos por puntaje de mayor a menor
-    candidatos.sort((a, b) => b.match_percent - a.match_percent);
+    candidatos.sort((a: any, b: any) => b.match_percent - a.match_percent);
 
     // Tomamos el Top 10 y asignamos el 'puesto'
-    const top10 = candidatos.slice(0, 10).map((auto, index) => ({
+    const top10 = candidatos.slice(0, 10).map((auto: any, index: number) => ({
       ...auto,
       puesto: index + 1
     }));
