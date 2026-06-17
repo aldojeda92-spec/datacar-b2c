@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const attrs = atributos || [];
 
     // ==========================================
-    // FASE 1: Extraer el ADN del Auto Ancla (Forzamos UUID)
+    // FASE 1: Extraer el ADN del Auto Ancla 
     // ==========================================
     const anclaResult = await db.execute(sql`
       SELECT * FROM catalogo_matriz 
@@ -35,26 +35,26 @@ export async function POST(request: Request) {
     const subsegmento = ancla.subsegmento || '';
 
     // ==========================================
-    // FASE 2: El Colador Elástico (Búsqueda en Espiral)
+    // FASE 2: El Colador Elástico (Búsqueda en Espiral CORREGIDA)
     // ==========================================
     let esRescate = false;
     
     const precioMin1 = precioBase * 0.85;
     const precioMax1 = precioBase * 1.15;
 
-    // Intento 1: Mismo subsegmento o carrocería, Precio +/- 15%
-    // Convertimos precio_usd a numeric para que no falle si la columna es texto
+    // Intento 1: MISMA carrocería AND MISMO subsegmento, Precio +/- 15%
     let result = await db.execute(sql`
       SELECT * FROM catalogo_matriz 
       WHERE id != ${autoAnclaId}::uuid 
       AND precio_usd::numeric >= ${precioMin1} 
       AND precio_usd::numeric <= ${precioMax1} 
-      AND (subsegmento = ${subsegmento} OR tipo_carroceria = ${tipoCarroceria})
+      AND tipo_carroceria = ${tipoCarroceria} 
+      AND subsegmento = ${subsegmento}
     `);
 
     let resultRows: any[] = (result as any).rows || result;
 
-    // Intento 2 (Modo Rescate): Si hay menos de 3 competidores, ampliamos la espiral
+    // Intento 2 (Modo Rescate): Ampliamos precio y subsegmento, pero MANTENEMOS la Carrocería estricta
     if (resultRows.length < 3) {
       esRescate = true;
       const precioMin2 = precioBase * 0.70;
