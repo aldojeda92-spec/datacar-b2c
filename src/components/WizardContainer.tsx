@@ -53,7 +53,14 @@ export default function WizardContainer() {
   const [activeVersions, setActiveVersions] = useState<Record<string, IAAuto>>({});
   const [esRescate, setEsRescate] = useState(false);
 
-  // Estados del Buscador
+  // === NUEVOS ESTADOS: Búsqueda por Similitud ===
+  const [searchMode, setSearchMode] = useState<'scratch' | 'similar'>('scratch');
+  const [anchorAuto, setAnchorAuto] = useState<IAAuto | null>(null);
+  const [similarSearchTerm, setSimilarSearchTerm] = useState('');
+  const [similarSearchResults, setSimilarSearchResults] = useState<IAAuto[]>([]);
+  const [isSearchingSimilar, setIsSearchingSimilar] = useState(false);
+
+  // Estados del Buscador (Paso 2)
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<IAAuto[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -79,9 +86,16 @@ export default function WizardContainer() {
 
   const isCelularValid = formData.celular.startsWith('09') && formData.celular.length === 10;
   
-  const isReady = PEDIR_DATOS_USUARIO
+  // === LÓGICA DE VALIDACIÓN CONDICIONAL ===
+  const isReadyScratch = PEDIR_DATOS_USUARIO
     ? formData.nombre && isCelularValid && formData.atributos.length === 3
     : formData.atributos.length === 3; 
+
+  const isReadySimilar = PEDIR_DATOS_USUARIO
+    ? formData.nombre && isCelularValid && formData.atributos.length === 3 && anchorAuto !== null
+    : formData.atributos.length === 3 && anchorAuto !== null;
+
+  const isReady = searchMode === 'scratch' ? isReadyScratch : isReadySimilar;
   
   const toggleArrayItem = (key: 'motorizacion' | 'tipoVehiculo' | 'origen' | 'concesionaria', value: string) => {
     setFormData(prev => {
@@ -116,18 +130,34 @@ export default function WizardContainer() {
     setCompareIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : prev.length < 3 ? [...prev, id] : prev);
   };
 
+  // === CEREBRO BIFURCADO: Decide a qué API llamar ===
   const handleExecute = async () => {
     setIsAnalyzing(true);
     try {
-      // PASO 1 (Regla 1): Al no pasarle un "id" en formData, el backend siempre creará un registro NUEVO ("Invitado")
-      const result = await saveLeadAction(formData);
+      const dataToSave = { ...formData };
+      if (searchMode === 'similar' && anchorAuto) {
+        dataToSave.notas = `[Búsqueda por Similitud] Ancla: ${anchorAuto.marca} ${anchorAuto.modelo}. ${formData.notas}`;
+      }
+
+      const result = await saveLeadAction(dataToSave);
+      
       if (result.success && result.leadId) {
         setCurrentLeadId(result.leadId);
         localStorage.setItem('datacar_lead_id', result.leadId);
-        const res = await fetch('/api/analyze', { 
-          method: 'POST', body: JSON.stringify({ leadId: result.leadId }),
-          headers: { 'Content-Type': 'application/json' }
-        });
+        
+        let res;
+        if (searchMode === 'scratch') {
+          res = await fetch('/api/analyze', { 
+            method: 'POST', body: JSON.stringify({ leadId: result.leadId }),
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } else {
+          res = await fetch('/api/analyze-similar', { 
+            method: 'POST', body: JSON.stringify({ autoAnclaId: anchorAuto?.id, atributos: formData.atributos }),
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
         const data = await res.json();
         if (data.success) { 
           setTop10(data.top10); 
@@ -143,7 +173,6 @@ export default function WizardContainer() {
     const selected = displayedAutos.filter(a => compareIds.includes(a.id));
     const nombres = selected.map(a => `${a.marca} ${a.modelo}`).join(' vs ');
     const leadIdToUse = currentLeadId || localStorage.getItem('datacar_lead_id');
-    // PASO 2 (Regla 2): Se asocia la comparativa al LeadID generado arriba
     if (leadIdToUse && compareIds.length >= 2) {
       await logComparisonAction({ leadId: leadIdToUse, vIds: compareIds, nombres: nombres });
     }
@@ -162,9 +191,7 @@ export default function WizardContainer() {
   const handleUnlockDossier = async () => {
     setIsSavingLead(true);
     try {
-      // PASO 3 (Regla 3): Rescatamos el ID de la sesión actual e INYECTAMOS para forzar el UPDATE
       const idGuardado = currentLeadId || localStorage.getItem('datacar_lead_id');
-      
       await saveLeadAction({
         ...formData,
         id: idGuardado
@@ -179,6 +206,7 @@ export default function WizardContainer() {
     }
   };
 
+  // Buscador predictivo (Paso 2)
   useEffect(() => {
     if (searchTerm.trim().length < 2) {
       setSearchResults([]);
@@ -201,6 +229,30 @@ export default function WizardContainer() {
     return () => clearTimeout(delayFn);
   }, [searchTerm]);
 
+  // === NUEVO: Buscador predictivo (Paso 1) ===
+  useEffect(() => {
+    if (searchMode !== 'similar') return;
+    if (similarSearchTerm.trim().length < 2) {
+      setSimilarSearchResults([]);
+      return;
+    }
+    const delayFn = setTimeout(async () => {
+      setIsSearchingSimilar(true);
+      try {
+        const res = await fetch(`/api/search-autos?q=${encodeURIComponent(similarSearchTerm)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSimilarSearchResults(data.autos || []);
+        }
+      } catch (e) {
+        console.error("Error al buscar autos", e);
+      } finally {
+        setIsSearchingSimilar(false);
+      }
+    }, 400); 
+    return () => clearTimeout(delayFn);
+  }, [similarSearchTerm, searchMode]);
+
   // ============================================================================
   // LOGICA CRO: FILTRO Y EXTRACCIÓN DE AD SLOTS (MÁXIMO 3)
   // ============================================================================
@@ -217,20 +269,15 @@ export default function WizardContainer() {
     index === self.findIndex((a) => a.id === auto.id)
   );
 
-  // Extraemos todos los autos que califican para promoción
   const allPromotedAutos = uniqueAutos.filter(auto => {
     const currentAuto = activeVersions[auto.id] || auto;
     return getPromocionValida(currentAuto.subsegmento) !== null;
   });
 
-  // Limitamos a un máximo de 3 Ad Slots para mantener el balance orgánico
   const top3Promoted = allPromotedAutos.slice(0, 3);
   const top3Ids = new Set(top3Promoted.map(a => a.id));
 
-  // El resto de los vehículos (orgánicos + cualquier promocionado excedente)
   const remainingAutos = uniqueAutos.filter(auto => !top3Ids.has(auto.id));
-
-  // Unificamos: Los Ad Slots primero, seguidos del contenido orgánico normal
   const displayedAutos = [...top3Promoted, ...remainingAutos];
   // ============================================================================
 
@@ -362,7 +409,6 @@ export default function WizardContainer() {
 
                      return (
                       <div key={auto.id} className="p-2 text-center space-y-1.5 bg-white border-x flex flex-col justify-between relative">
-                        {/* INYECCIÓN CRO: BADGE DE PROMOCIÓN */}
                         {promoValida && (
                           <div className="absolute top-2 left-0 right-0 z-10 flex justify-center">
                             <span className="bg-[#00BFFF] text-[#0A1F33] font-black text-[8px] uppercase px-2 py-0.5 rounded shadow-sm">
@@ -394,7 +440,7 @@ export default function WizardContainer() {
                   { label: 'Seguridad (ADAS)', key: 'adas' },
                   { label: 'Airbags', key: 'airbags' },
                   { label: 'Dimensiones', key: 'dimensiones' },
-                  { label: 'Despeje del Suelo', key: 'bauleraLitros' }, // Mantenido tal cual lo tenias, aunque parece error tipográfico tuyo previo
+                  { label: 'Despeje del Suelo', key: 'bauleraLitros' },
                   { label: 'Baulera (Litros)', key: 'bauleraLitros' },
                   { label: 'Capacidad Plazas', key: 'plazas' },
                   { label: 'Infoentretenimiento', key: 'tamanhoPantalla' },
@@ -447,14 +493,19 @@ export default function WizardContainer() {
                 <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mt-1">Consultoría Automotriz · Paraguay</p>
               </div>
               <div className="text-right">
-                <h2 className="text-lg font-montserrat font-black uppercase text-[#0A1F33]">Dossier Estratégico</h2>
-                <p className="text-[10px] font-bold text-slate-500">Generado para: {formData.nombre !== 'Invitado' ? formData.nombre : 'Cliente VIP'}</p>
+                <h2 className="text-lg font-montserrat font-black uppercase text-[#0A1F33]">
+                  {searchMode === 'similar' ? 'Análisis de Alternativas' : 'Dossier Estratégico'}
+                </h2>
+                {searchMode === 'similar' && anchorAuto ? (
+                  <p className="text-[10px] font-bold text-[#00BFFF] mt-1">Frente a: {anchorAuto.marca} {anchorAuto.modelo}</p>
+                ) : (
+                  <p className="text-[10px] font-bold text-slate-500 mt-1">Generado para: {formData.nombre !== 'Invitado' ? formData.nombre : 'Cliente VIP'}</p>
+                )}
               </div>
             </header>
 
             {/* RECOMENDACIÓN PRINCIPAL */}
             <section className="bg-slate-50 p-4 mb-6 border-l-4 border-[#0A1F33] break-inside-avoid relative">
-              {/* INYECCIÓN CRO EN PDF: BADGE DE PROMOCIÓN */}
               {getPromocionValida(autoRecomendado.subsegmento) && (
                  <div className="absolute -top-3 right-4 bg-[#0A1F33] text-[#00BFFF] font-black text-[9px] uppercase px-3 py-1 shadow-sm border-b-2 border-[#00BFFF]">
                    {getPromocionValida(autoRecomendado.subsegmento)}
@@ -584,6 +635,22 @@ export default function WizardContainer() {
         <div className="max-w-4xl mx-auto p-12 animate-in fade-in duration-700">
           <div className="bg-white border border-slate-100 p-6 md:p-12 shadow-2xl space-y-8 md:space-y-12">
             
+            {/* NUEVO: Switcher Visual */}
+            <div className="flex bg-slate-100 p-1 rounded mb-4 shadow-inner">
+              <button 
+                onClick={() => setSearchMode('scratch')} 
+                className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest transition-all ${searchMode === 'scratch' ? 'bg-white shadow-sm text-[#0A1F33]' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Búsqueda Personalizada
+              </button>
+              <button 
+                onClick={() => setSearchMode('similar')} 
+                className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest transition-all ${searchMode === 'similar' ? 'bg-white shadow-sm text-[#0A1F33]' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Encontrar Alternativas
+              </button>
+            </div>
+
             {PEDIR_DATOS_USUARIO && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div className="space-y-1">
@@ -613,36 +680,98 @@ export default function WizardContainer() {
               </div>
             )}
 
-            <div className="space-y-10">
-              <div className="flex justify-between items-center">
-                <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
-                <div className="flex gap-4 font-black text-[#0A1F33] text-sm tracking-tighter bg-slate-50 px-4 py-2 rounded-full">
-                  <span>${formData.presupuestoMin.toLocaleString()}</span> — <span>${formData.presupuestoMax.toLocaleString()}</span>
+            {searchMode === 'scratch' ? (
+              <>
+                <div className="space-y-10 animate-in fade-in">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
+                    <div className="flex gap-4 font-black text-[#0A1F33] text-sm tracking-tighter bg-slate-50 px-4 py-2 rounded-full">
+                      <span>${formData.presupuestoMin.toLocaleString()}</span> — <span>${formData.presupuestoMax.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="relative w-full h-1 bg-slate-100 rounded-full">
+                    {/* Matemáticas ajustadas para que el input arranque en 8000 en vez de 0 */}
+                    <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
+                    <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                    <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                  </div>
+                </div>
+
+                <div className="space-y-4 animate-in fade-in">
+                  <label className="text-[9px] font-black uppercase text-slate-400">Atributos que buscás en tu próximo 0km (Seleccionar 3) *</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['Seguridad', 'Tecnología', 'Espacio', 'Precio', 'Eficiencia'].map(at => (
+                      <button key={at} onClick={() => toggleAtributo(at)} className={`px-6 py-2 text-[10px] font-black border-2 transition-all ${formData.atributos.includes(at) ? 'bg-[#0A1F33] text-white border-[#0A1F33]' : 'text-slate-300 border-slate-100 hover:border-slate-200'}`}>{at}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">
+                  <MultiSelect label="Motorización" items={['PHEV', 'HEV', 'EV', 'Diesel', 'Flex', 'Nafta']} value={formData.motorizacion} storeKey="motorizacion" />
+                  <MultiSelect label="Tipo de Vehículo" items={['SUV', 'Sedan', 'Hatchback', 'Pickup']} value={formData.tipoVehiculo} storeKey="tipoVehiculo" />
+                  <MultiSelect label="Origen de Marca" items={['USA','Corea', 'Japón', 'Europa', 'China']} value={formData.origen} storeKey="origen" />
+                  <MultiSelect label="Concesionaria" items={['Garden', 'Automotor', 'Santa Rosa', 'Chacomer', 'Toyotoshi', 'Condor', 'Gorostiaga', 'Automaq', 'De La Sobera', 'Vicar', 'Tape Ruvicha', 'Diesa']} value={formData.concesionaria} storeKey="concesionaria" />
+                </div>
+              </>
+            ) : (
+              // NUEVO: Formulario para Modo Similitud
+              <div className="space-y-12 animate-in fade-in">
+                <div className="space-y-4 relative z-40">
+                  <label className="text-[9px] font-black uppercase text-slate-400">1. Seleccioná el Auto de Referencia (Ancla) *</label>
+                  {anchorAuto ? (
+                    <div className="flex justify-between items-center p-6 border-2 border-[#00BFFF] bg-blue-50/30">
+                      <div>
+                        <span className="font-black text-lg text-[#0A1F33] uppercase">{anchorAuto.marca} {anchorAuto.modelo}</span>
+                        <span className="text-xs text-slate-500 ml-2 font-bold">{anchorAuto.version}</span>
+                      </div>
+                      <button onClick={() => setAnchorAuto(null)} className="text-[10px] text-red-500 font-black uppercase hover:underline">Cambiar</button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Ej: Hyundai Tucson, Kia Sportage..."
+                        value={similarSearchTerm}
+                        onChange={(e) => setSimilarSearchTerm(e.target.value)}
+                        className="w-full p-6 border-2 border-slate-100 bg-white outline-none focus:border-[#00BFFF] text-base font-bold text-[#0A1F33] transition-colors shadow-sm"
+                      />
+                      {similarSearchTerm.length >= 2 && (
+                        <div className="absolute top-full left-0 w-full bg-white border-2 border-slate-100 shadow-2xl mt-1 max-h-60 overflow-y-auto z-50">
+                          {isSearchingSimilar ? (
+                            <div className="p-4 text-xs font-bold text-slate-400 uppercase text-center animate-pulse">Buscando...</div>
+                          ) : similarSearchResults.length > 0 ? (
+                            similarSearchResults.map(auto => (
+                              <div 
+                                key={auto.id} 
+                                onClick={() => { setAnchorAuto(auto); setSimilarSearchTerm(''); setSimilarSearchResults([]); }}
+                                className="p-4 border-b border-slate-50 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-colors"
+                              >
+                                <div>
+                                  <span className="font-black text-[#0A1F33] uppercase">{auto.marca} {auto.modelo}</span>
+                                  <span className="text-[10px] text-slate-400 ml-2 font-bold">{auto.version}</span>
+                                </div>
+                                <span className="text-[#00BFFF] font-black text-xs">${auto.precioUsd?.toLocaleString()}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="p-4 text-xs font-bold text-slate-400 uppercase text-center">No encontrado</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <label className="text-[9px] font-black uppercase text-slate-400">2. ¿En qué querés que las alternativas superen o igualen al ancla? (Seleccioná 3) *</label>
+                  <div className="flex flex-wrap gap-2">
+                    {['Seguridad', 'Tecnología', 'Espacio', 'Precio', 'Eficiencia'].map(at => (
+                      <button key={at} onClick={() => toggleAtributo(at)} className={`px-6 py-4 text-xs md:text-[10px] font-black border-2 transition-all ${formData.atributos.includes(at) ? 'bg-[#0A1F33] text-white border-[#0A1F33]' : 'text-slate-400 border-slate-100 hover:border-slate-200'}`}>{at}</button>
+                    ))}
+                  </div>
                 </div>
               </div>
-              <div className="relative w-full h-1 bg-slate-100 rounded-full">
-                {/* Matemáticas ajustadas para que el input arranque en 8000 en vez de 0 */}
-                <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
-                <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
-                <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <label className="text-[9px] font-black uppercase text-slate-400">Atributos que buscás en tu próximo 0km (Seleccionar 3) *</label>
-              <div className="flex flex-wrap gap-2">
-                {['Seguridad', 'Tecnología', 'Espacio', 'Precio', 'Eficiencia'].map(at => (
-                  <button key={at} onClick={() => toggleAtributo(at)} className={`px-6 py-2 text-[10px] font-black border-2 transition-all ${formData.atributos.includes(at) ? 'bg-[#0A1F33] text-white border-[#0A1F33]' : 'text-slate-300 border-slate-100 hover:border-slate-200'}`}>{at}</button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <MultiSelect label="Motorización" items={['PHEV', 'HEV', 'EV', 'Diesel', 'Flex', 'Nafta']} value={formData.motorizacion} storeKey="motorizacion" />
-              <MultiSelect label="Tipo de Vehículo" items={['SUV', 'Sedan', 'Hatchback', 'Pickup']} value={formData.tipoVehiculo} storeKey="tipoVehiculo" />
-              <MultiSelect label="Origen de Marca" items={['USA','Corea', 'Japón', 'Europa', 'China']} value={formData.origen} storeKey="origen" />
-              <MultiSelect label="Concesionaria" items={['Garden', 'Automotor', 'Santa Rosa', 'Chacomer', 'Toyotoshi', 'Condor', 'Gorostiaga', 'Automaq', 'De La Sobera', 'Vicar', 'Tape Ruvicha', 'Diesa']} value={formData.concesionaria} storeKey="concesionaria" />
-            </div>
+            )}
 
             <div className="space-y-1">
               <label className="text-[9px] font-black uppercase text-slate-400">Notas Adicionales</label>
@@ -658,22 +787,41 @@ export default function WizardContainer() {
         <div className="max-w-[1700px] mx-auto p-10 pb-40 animate-in fade-in duration-1000 space-y-12">
           
           <div className="bg-[#0A1F33] p-12 text-white border-l-8 border-[#00BFFF] shadow-2xl">
-            <h2 className="font-montserrat font-black text-2xl uppercase tracking-tighter">
-              {PEDIR_DATOS_USUARIO && formData.nombre !== 'Invitado' 
-                ? `${formData.nombre.split(' ')[0]}, busca un auto con ${formData.atributos.join(', ')}.` 
-                : `Buscás un auto con ${formData.atributos.join(', ')}.`}
-            </h2>
-            <p className="mt-4 text-slate-400 font-medium text-sm uppercase tracking-widest underline decoration-[#00BFFF] underline-offset-8">
-              Inversión: ${formData.presupuestoMin.toLocaleString()} – ${formData.presupuestoMax.toLocaleString()} | 
-              Origen: {formData.origen.length > 0 ? formData.origen.join(', ') : 'Todos'} | 
-              Motor: {formData.motorizacion.length > 0 ? formData.motorizacion.join(', ') : 'Cualquiera'}
-            </p>
+            {searchMode === 'similar' && anchorAuto ? (
+               <>
+                 <h2 className="font-montserrat font-black text-2xl uppercase tracking-tighter">
+                   Alternativas frente a {anchorAuto.marca} {anchorAuto.modelo}
+                 </h2>
+                 <p className="mt-4 text-slate-400 font-medium text-sm uppercase tracking-widest underline decoration-[#00BFFF] underline-offset-8">
+                   Priorizando: {formData.atributos.join(', ')}
+                 </p>
+               </>
+            ) : (
+               <>
+                 <h2 className="font-montserrat font-black text-2xl uppercase tracking-tighter">
+                   {PEDIR_DATOS_USUARIO && formData.nombre !== 'Invitado' 
+                     ? `${formData.nombre.split(' ')[0]}, busca un auto con ${formData.atributos.join(', ')}.` 
+                     : `Buscás un auto con ${formData.atributos.join(', ')}.`}
+                 </h2>
+                 <p className="mt-4 text-slate-400 font-medium text-sm uppercase tracking-widest underline decoration-[#00BFFF] underline-offset-8">
+                   Inversión: ${formData.presupuestoMin.toLocaleString()} – ${formData.presupuestoMax.toLocaleString()} | 
+                   Origen: {formData.origen.length > 0 ? formData.origen.join(', ') : 'Todos'} | 
+                   Motor: {formData.motorizacion.length > 0 ? formData.motorizacion.join(', ') : 'Cualquiera'}
+                 </p>
+               </>
+            )}
           </div>
 
           {esRescate && (
             <div className="w-full bg-orange-100 border-l-4 border-orange-500 p-6 rounded-r-lg shadow-sm">
-              <h3 className="text-orange-800 font-montserrat font-black text-sm uppercase tracking-widest">⚠️ El auto que buscas no lo encontramos</h3>
-              <p className="text-orange-700 text-xs mt-1 font-medium">Pero estas opciones te podrían interesar según tu presupuesto y carrocería:</p>
+              <h3 className="text-orange-800 font-montserrat font-black text-sm uppercase tracking-widest">
+                {searchMode === 'similar' ? '⚠️ Búsqueda Ampliada Automáticamente' : '⚠️ El auto que buscas no lo encontramos'}
+              </h3>
+              {searchMode === 'similar' ? (
+                <p className="text-orange-700 text-xs mt-1 font-medium">No encontramos suficientes competidores directos en ese rango de precio estricto, así que ampliamos la búsqueda priorizando tamaño y carrocería.</p>
+              ) : (
+                <p className="text-orange-700 text-xs mt-1 font-medium">Pero estas opciones te podrían interesar según tu presupuesto y carrocería:</p>
+              )}
             </div>
           )}
 
@@ -733,7 +881,6 @@ export default function WizardContainer() {
               return (
                 <div key={auto.id} className={`flex flex-col transition-all relative overflow-hidden ${isVIP ? 'bg-gradient-to-b from-slate-100 to-white border-2 border-[#0A1F33] shadow-md' : 'bg-white border border-slate-100 shadow-sm'} ${compareIds.includes(auto.id) ? 'ring-4 ring-[#00BFFF]/20' : ''}`}>
                   
-                  {/* HEADER VIP O ESPACIADOR FANTASMA PARA ALINEACIÓN PERFECTA */}
                   {isVIP && promoValida ? (
                     <div className="bg-[#0A1F33] w-full px-4 py-2.5 flex flex-col items-center justify-center relative z-20 border-b-2 border-[#00BFFF]">
                       <span className="text-slate-400 text-[6px] font-black uppercase tracking-[0.2em] mb-0.5">Sugerencia Patrocinada</span>
@@ -748,7 +895,6 @@ export default function WizardContainer() {
 
                   <div className="relative h-56 bg-slate-50 overflow-hidden border-b border-slate-100">
                     
-                    {/* ETIQUETA DE PUESTO (Movida dentro de la imagen para respetar el header corporativo) */}
                     {auto.puesto ? (
                       <div className="absolute top-0 left-0 w-10 h-10 bg-[#0A1F33] text-white flex items-center justify-center font-black z-20 shadow-md">{auto.puesto}</div>
                     ) : (
@@ -823,7 +969,6 @@ export default function WizardContainer() {
             })}
           </div>
 
-          {/* Información Financiera */}
           <div className="mt-20 border-t-4 border-[#0A1F33] pt-12">
             <div className="bg-[#f8fafc] border border-slate-200 text-[#0A1F33] p-10 md:p-16 shadow-lg relative">
               <h2 className="text-3xl font-montserrat font-black uppercase mb-2">
@@ -876,7 +1021,6 @@ export default function WizardContainer() {
             </div>
           </div>
           
-          {/* Barra Flotante Comparar */}
           {compareIds.length >= 1 && (
             <div className="fixed bottom-6 md:bottom-12 left-1/2 -translate-x-1/2 z-50 w-[95%] md:w-auto bg-[#0A1F33] text-white p-4 md:p-8 shadow-2xl flex items-center justify-between md:justify-center md:gap-10 border-t-4 border-[#00BFFF] rounded-sm animate-in slide-in-from-bottom-10 print:hidden">
               <div className="text-sm font-bold uppercase tracking-widest">{compareIds.length} <span className="text-slate-400 font-medium">seleccionados</span></div>
