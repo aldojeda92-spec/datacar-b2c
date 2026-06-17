@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     const subsegmento = ancla.subsegmento || '';
 
     // ==========================================
-    // FASE 2: El Colador Elástico (Búsqueda en Espiral CORREGIDA)
+    // FASE 2: El Colador Elástico (Búsqueda en Espiral)
     // ==========================================
     let esRescate = false;
     
@@ -80,22 +80,18 @@ export async function POST(request: Request) {
       const bauleraAuto = parseInt(auto.baulera_litros) || 0;
       const bauleraAncla = parseInt(ancla.baulera_litros) || 0;
 
-      // Premio por PRECIO
       if (attrs.includes('Precio') && precioAuto <= precioBase) score += 15;
       
-      // Premio por ESPACIO
       if (attrs.includes('Espacio')) {
         if (bauleraAuto > bauleraAncla) score += 10;
         if (auto.largo > ancla.largo) score += 5;
       }
       
-      // Premio por SEGURIDAD
       if (attrs.includes('Seguridad')) {
         if (auto.airbags >= ancla.airbags) score += 10;
         if (auto.adas && auto.adas.toLowerCase() !== 'no') score += 5;
       }
 
-      // Premio por TECNOLOGÍA
       if (attrs.includes('Tecnología') || attrs.includes('Tecnologia')) {
         if (auto.tamanho_pantalla && auto.tamanho_pantalla.length > 3) score += 10;
         if (auto.camaras && auto.camaras.toLowerCase().includes('360')) score += 5;
@@ -103,9 +99,6 @@ export async function POST(request: Request) {
 
       score = Math.min(score, 99); 
 
-      // ==========================================
-      // FASE 4: Veredicto Comercial Automático
-      // ==========================================
       let veredicto = `Sólida alternativa al ${ancla.marca} ${ancla.modelo}. `;
       if (precioAuto < precioBase) veredicto += `Destaca por requerir menor inversión. `;
       if (bauleraAuto > bauleraAncla) veredicto += `Supera al modelo de referencia en capacidad de baulera (${bauleraAuto}L). `;
@@ -145,9 +138,41 @@ export async function POST(request: Request) {
       };
     });
 
-    candidatos.sort((a: any, b: any) => b.match_percent - a.match_percent);
+    // ==========================================
+    // FASE 3.5: AGRUPACIÓN POR MODELO
+    // ==========================================
+    
+    // 1. Ordenamos TODOS los candidatos para que los mejores queden arriba
+    candidatos.sort((a: any, b: any) => {
+      if (b.match_percent !== a.match_percent) {
+        return b.match_percent - a.match_percent;
+      }
+      return a.precioUsd - b.precioUsd; // Si empatan, prioriza el más barato
+    });
 
-    const top10 = candidatos.slice(0, 10).map((auto: any, index: number) => ({
+    const modelosAgrupados = new Map();
+
+    // 2. Agrupamos metiendo las versiones secundarias al array "versiones"
+    candidatos.forEach((auto: any) => {
+      const key = `${auto.marca}-${auto.modelo}`;
+      
+      if (!modelosAgrupados.has(key)) {
+        // Es la primera vez que vemos este modelo (el representante)
+        auto.versiones = [{ ...auto, versiones: [] }];
+        modelosAgrupados.set(key, auto);
+      } else {
+        // Ya vimos este modelo, lo agregamos como versión alternativa
+        modelosAgrupados.get(key).versiones.push({ ...auto, versiones: [] });
+      }
+    });
+
+    // 3. Extraemos la lista limpia sin duplicados de modelo
+    const candidatosUnicos = Array.from(modelosAgrupados.values());
+
+    // ==========================================
+    // FASE 4: Top 10 Final
+    // ==========================================
+    const top10 = candidatosUnicos.slice(0, 10).map((auto: any, index: number) => ({
       ...auto,
       puesto: index + 1
     }));
