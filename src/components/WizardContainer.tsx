@@ -220,7 +220,7 @@ export default function WizardContainer() {
     const nombres = selected.map(a => `${a.marca} ${a.modelo}`).join(' vs ');
     const leadIdToUse = currentLeadId || localStorage.getItem('datacar_lead_id');
     if (leadIdToUse && compareIds.length >= 2) {
-      await logComparisonAction({ SoulId: leadIdToUse, vIds: compareIds, nombres: nombres });
+      await logComparisonAction({ leadId: leadIdToUse, vIds: compareIds, nombres: nombres });
     }
     setShowComparison(true);
     window.scrollTo(0, 0);
