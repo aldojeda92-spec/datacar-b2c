@@ -112,7 +112,7 @@ export default function WizardContainer() {
     let val = Number(inputMin);
     if (isNaN(val)) val = 8000;
     if (val < 8000) val = 8000;
-    if (val > 198000) val = 198000; // Tope máximo para el mínimo
+    if (val > 198000) val = 198000; 
 
     let newMax = formData.presupuestoMax;
     if (val > newMax - 2000) {
@@ -129,7 +129,7 @@ export default function WizardContainer() {
     let val = Number(inputMax);
     if (isNaN(val)) val = 50000;
     if (val > 200000) val = 200000;
-    if (val < 10000) val = 10000; // Tope mínimo para el máximo
+    if (val < 10000) val = 10000; 
 
     let newMin = formData.presupuestoMin;
     if (val < newMin + 2000) {
@@ -220,7 +220,7 @@ export default function WizardContainer() {
     const nombres = selected.map(a => `${a.marca} ${a.modelo}`).join(' vs ');
     const leadIdToUse = currentLeadId || localStorage.getItem('datacar_lead_id');
     if (leadIdToUse && compareIds.length >= 2) {
-      await logComparisonAction({ leadId: leadIdToUse, vIds: compareIds, nombres: nombres });
+      await logComparisonAction({ SoulId: leadIdToUse, vIds: compareIds, nombres: nombres });
     }
     setShowComparison(true);
     window.scrollTo(0, 0);
@@ -658,9 +658,6 @@ export default function WizardContainer() {
     );
   }
 
-  // ============================================================================
-  // FLUJO NORMAL WEB (Step 1 y Step 2)
-  // ============================================================================
   return (
     <div className={`min-h-screen font-inter ${step === 2 ? 'bg-[#F8FAFC]' : 'bg-white'}`}>
       
@@ -725,30 +722,38 @@ export default function WizardContainer() {
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
                     
-                    {/* INYECCIÓN: Inputs Sincronizados de Presupuesto */}
-                    <div className="flex items-center gap-2 w-full md:w-auto">
-                      <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full md:w-auto">
-                        <span className="text-slate-400 font-black text-sm mr-1">$</span>
-                        <input 
-                          type="number" 
-                          value={inputMin} 
-                          onChange={(e) => setInputMin(e.target.value)} 
-                          onBlur={handleInputMinBlur}
-                          onKeyDown={(e) => e.key === 'Enter' && handleInputMinBlur()}
-                          className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                        />
+                    {/* INYECCIÓN DE MEJORA: Inputs Sincronizados con Etiquetas "Desde" y "Hasta" */}
+                    <div className="flex items-center gap-4 w-full md:w-auto">
+                      <div className="flex flex-col gap-1 w-full md:w-auto">
+                        <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Desde</span>
+                        <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
+                          <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                          <input 
+                            type="number" 
+                            value={inputMin} 
+                            onChange={(e) => setInputMin(e.target.value)} 
+                            onBlur={handleInputMinBlur}
+                            onKeyDown={(e) => e.key === 'Enter' && handleInputMinBlur()}
+                            className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          />
+                        </div>
                       </div>
-                      <span className="text-slate-300 font-black">—</span>
-                      <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full md:w-auto">
-                        <span className="text-slate-400 font-black text-sm mr-1">$</span>
-                        <input 
-                          type="number" 
-                          value={inputMax} 
-                          onChange={(e) => setInputMax(e.target.value)} 
-                          onBlur={handleInputMaxBlur}
-                          onKeyDown={(e) => e.key === 'Enter' && handleInputMaxBlur()}
-                          className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                        />
+
+                      <span className="text-slate-300 font-black mt-4">—</span>
+
+                      <div className="flex flex-col gap-1 w-full md:w-auto">
+                        <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Hasta</span>
+                        <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
+                          <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                          <input 
+                            type="number" 
+                            value={inputMax} 
+                            onChange={(e) => setInputMax(e.target.value)} 
+                            onBlur={handleInputMaxBlur}
+                            onKeyDown={(e) => e.key === 'Enter' && handleInputMaxBlur()}
+                            className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -837,7 +842,7 @@ export default function WizardContainer() {
 
             <div className="space-y-1">
               <label className="text-[9px] font-black uppercase text-slate-400">Notas Adicionales</label>
-              <textarea value={formData.notas} onChange={e => setFormData({...formData, notas: e.target.value})} placeholder="Ej: Busco que tenga buen valor de reventa..." className="w-full p-4 bg-slate-50 border-b-2 text-sm min-h-[100px] outline-none font-medium" />
+              <textarea value={formData.notas} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Ej: Busco que tenga buen valor de reventa..." className="w-full p-4 bg-slate-50 border-b-2 text-sm min-h-[100px] outline-none font-medium" />
             </div>
 
             <button disabled={!isReady} onClick={handleExecute} className="w-full py-6 bg-[#0A1F33] text-white font-montserrat font-black text-xs uppercase tracking-[5px] hover:bg-[#00BFFF] transition-colors disabled:opacity-20 shadow-xl">Generar Análisis Estratégico →</button>
@@ -1050,7 +1055,7 @@ export default function WizardContainer() {
                     <ul className="list-disc pl-5 space-y-2">
                       <li><strong className="text-[#0A1F33] font-bold">Cédula de Identidad:</strong> Copia de ambos lados. (Si estás casado/a, también del cónyuge).</li>
                       <li><strong className="text-[#0A1F33] font-bold">Comprobantes de Ingreso:</strong> 3 últimas liquidaciones de salario (si sos dependiente) o últimas 6 declaraciones de IVA (si sos independiente).</li>
-                      <li><strong className="text-[#0A1F33] font-bold">Validación de Domicilio:</strong> Factura de ANDE o NIS (no importa que no esté a tu nombre) y ubicación.</li>
+                      <li><strong className="text-[#0A1F33] font-bold">Validación de Domicilio:</strong> Factura de ANDE o NIS (no importa que no esté a tu nombre) and ubicación.</li>
                       <li><strong className="text-[#0A1F33] font-bold">Respaldos (Opcional pero recomendado):</strong> 3 a 6 últimos extractos bancarios. Si tenés inmuebles o vehículos a tu nombre, adjuntá el título/cédula verde.</li>
                       <li><strong className="text-[#0A1F33] font-bold">Referencias:</strong> Personales (nombre y celular) y Comerciales (nombre del comercio).</li>
                     </ul>
