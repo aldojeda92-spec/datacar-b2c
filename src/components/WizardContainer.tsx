@@ -842,7 +842,7 @@ export default function WizardContainer() {
 
             <div className="space-y-1">
               <label className="text-[9px] font-black uppercase text-slate-400">Notas Adicionales</label>
-              <textarea value={formData.notas} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Ej: Busco que tenga buen valor de reventa..." className="w-full p-4 bg-slate-50 border-b-2 text-sm min-h-[100px] outline-none font-medium" />
+              <textarea value={formData.notas} onChange={e => setFormData({...formData, notas: e.target.value})} placeholder="Ej: Busco que tenga buen valor de reventa..." className="w-full p-4 bg-slate-50 border-b-2 text-sm min-h-[100px] outline-none font-medium" />
             </div>
 
             <button disabled={!isReady} onClick={handleExecute} className="w-full py-6 bg-[#0A1F33] text-white font-montserrat font-black text-xs uppercase tracking-[5px] hover:bg-[#00BFFF] transition-colors disabled:opacity-20 shadow-xl">Generar Análisis Estratégico →</button>
