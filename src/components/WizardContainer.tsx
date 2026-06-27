@@ -327,7 +327,8 @@ export default function WizardContainer() {
   const displayedAutos = [...top3Promoted, ...remainingAutos];
   // ============================================================================
 
-  const MultiSelect = ({ label, items, value, storeKey }: { label: string, items: string[], value: string[], storeKey: any }) => (
+  // === INYECCIÓN: Componente MultiSelect modificado para soportar descripciones (diccionario) ===
+  const MultiSelect = ({ label, items, value, storeKey, descriptions }: { label: string, items: string[], value: string[], storeKey: any, descriptions?: Record<string, string> }) => (
     <div className="space-y-1 relative">
       <label className="text-[9px] font-black uppercase text-slate-400">{label}</label>
       <div 
@@ -342,14 +343,21 @@ export default function WizardContainer() {
       {openFilter === label && (
         <div className="absolute z-50 w-full bg-white border shadow-2xl max-h-60 overflow-y-auto p-2 animate-in fade-in zoom-in duration-200">
           {items.map(item => (
-            <label key={item} className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer rounded transition-colors">
+            <label key={item} className="flex items-start gap-3 p-3 hover:bg-slate-50 cursor-pointer rounded transition-colors">
               <input 
                 type="checkbox" 
                 checked={value.includes(item)} 
                 onChange={() => toggleArrayItem(storeKey, item)}
-                className="w-4 h-4 accent-[#00BFFF] rounded border-slate-300"
+                className="w-4 h-4 mt-0.5 accent-[#00BFFF] rounded border-slate-300"
               />
-              <span className="text-xs font-bold text-[#0A1F33] uppercase">{item}</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-[#0A1F33] uppercase leading-none">{item}</span>
+                {descriptions && descriptions[item] && (
+                  <span className="text-[9px] font-medium text-slate-400 mt-1 leading-tight">
+                    {descriptions[item]}
+                  </span>
+                )}
+              </div>
             </label>
           ))}
         </div>
@@ -722,7 +730,6 @@ export default function WizardContainer() {
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
                     
-                    {/* INYECCIÓN DE MEJORA: Inputs Sincronizados con Etiquetas "Desde" y "Hasta" */}
                     <div className="flex items-center gap-4 w-full md:w-auto">
                       <div className="flex flex-col gap-1 w-full md:w-auto">
                         <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Desde</span>
@@ -775,7 +782,20 @@ export default function WizardContainer() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">
-                  <MultiSelect label="Motorización" items={['PHEV', 'HEV', 'EV', 'Diesel', 'Flex', 'Nafta']} value={formData.motorizacion} storeKey="motorizacion" />
+                  {/* INYECCIÓN: MultiSelect de Motorización con Descripciones */}
+                  <MultiSelect 
+                    label="Motorización" 
+                    items={['Nafta', 'Flex', 'Diesel', 'MHEV', 'HEV', 'PHEV', 'EV', 'REEV']} 
+                    value={formData.motorizacion} 
+                    storeKey="motorizacion" 
+                    descriptions={{
+                      'MHEV': 'Híbrido Suave',
+                      'HEV': 'Híbrido Autorrecargable',
+                      'PHEV': 'Híbrido Enchufable',
+                      'EV': '100% Eléctrico',
+                      'REEV': 'Eléctrico Rango Extendido'
+                    }}
+                  />
                   <MultiSelect label="Tipo de Vehículo" items={['SUV', 'Sedan', 'Hatchback', 'Pickup']} value={formData.tipoVehiculo} storeKey="tipoVehiculo" />
                   <MultiSelect label="Origen de Marca" items={['USA','Corea', 'Japón', 'Europa', 'China']} value={formData.origen} storeKey="origen" />
                   <MultiSelect label="Concesionaria" items={['Garden', 'Automotor', 'Santa Rosa', 'Chacomer', 'Toyotoshi', 'Condor', 'Gorostiaga', 'Automaq', 'De La Sobera', 'Vicar', 'Tape Ruvicha', 'Diesa']} value={formData.concesionaria} storeKey="concesionaria" />
