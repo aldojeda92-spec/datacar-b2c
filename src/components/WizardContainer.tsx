@@ -96,6 +96,52 @@ export default function WizardContainer() {
     : formData.atributos.length === 3 && anchorAuto !== null;
 
   const isReady = searchMode === 'scratch' ? isReadyScratch : isReadySimilar;
+
+  // === NUEVO: Sincronización a Dos Vías para Presupuesto ===
+  const [inputMin, setInputMin] = useState(formData.presupuestoMin.toString());
+  const [inputMax, setInputMax] = useState(formData.presupuestoMax.toString());
+
+  // Escucha cambios en la barra y actualiza las cajas de texto en vivo
+  useEffect(() => {
+    setInputMin(formData.presupuestoMin.toString());
+    setInputMax(formData.presupuestoMax.toString());
+  }, [formData.presupuestoMin, formData.presupuestoMax]);
+
+  // Validadores y "Empuje Automático" al perder el foco (onBlur)
+  const handleInputMinBlur = () => {
+    let val = Number(inputMin);
+    if (isNaN(val)) val = 8000;
+    if (val < 8000) val = 8000;
+    if (val > 198000) val = 198000; // Tope máximo para el mínimo
+
+    let newMax = formData.presupuestoMax;
+    if (val > newMax - 2000) {
+      newMax = val + 2000;
+      if (newMax > 200000) {
+        newMax = 200000;
+        val = 198000;
+      }
+    }
+    setFormData(prev => ({ ...prev, presupuestoMin: val, presupuestoMax: newMax }));
+  };
+
+  const handleInputMaxBlur = () => {
+    let val = Number(inputMax);
+    if (isNaN(val)) val = 50000;
+    if (val > 200000) val = 200000;
+    if (val < 10000) val = 10000; // Tope mínimo para el máximo
+
+    let newMin = formData.presupuestoMin;
+    if (val < newMin + 2000) {
+      newMin = val - 2000;
+      if (newMin < 8000) {
+        newMin = 8000;
+        val = 10000;
+      }
+    }
+    setFormData(prev => ({ ...prev, presupuestoMin: newMin, presupuestoMax: val }));
+  };
+  // =========================================================
   
   const toggleArrayItem = (key: 'motorizacion' | 'tipoVehiculo' | 'origen' | 'concesionaria', value: string) => {
     setFormData(prev => {
@@ -484,7 +530,6 @@ export default function WizardContainer() {
         {autoRecomendado && (
           <div className="hidden print:block w-full bg-white px-8 py-4 font-inter text-slate-800">
             
-            {/* CABECERA: Aplicación Estricta de Manual de Marca */}
             <header className="border-b-2 border-[#0A1F33] pb-4 mb-6 flex justify-between items-end">
               <div>
                 <h1 className="text-3xl font-montserrat font-black uppercase tracking-tighter text-[#0A1F33]">
@@ -504,7 +549,6 @@ export default function WizardContainer() {
               </div>
             </header>
 
-            {/* RECOMENDACIÓN PRINCIPAL */}
             <section className="bg-slate-50 p-4 mb-6 border-l-4 border-[#0A1F33] break-inside-avoid relative">
               {getPromocionValida(autoRecomendado.subsegmento) && (
                  <div className="absolute -top-3 right-4 bg-[#0A1F33] text-[#00BFFF] font-black text-[9px] uppercase px-3 py-1 shadow-sm border-b-2 border-[#00BFFF]">
@@ -527,7 +571,6 @@ export default function WizardContainer() {
               </div>
             </section>
 
-            {/* GRILLA COMPRIMIDA PARA A4 */}
             <section className="mb-6">
               <h3 className="text-xs font-montserrat font-black uppercase tracking-widest text-[#0A1F33] border-b border-slate-200 pb-1 mb-3">Matriz de Datos Duros</h3>
               <table className="w-full text-left border-collapse">
@@ -570,7 +613,6 @@ export default function WizardContainer() {
               </table>
             </section>
 
-            {/* OPCIONES EXTRA */}
             {opcionesExtra.length > 0 && (
               <section className="mb-6 break-inside-avoid">
                 <h3 className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-2">Otras opciones que cumplen tu perfil:</h3>
@@ -593,7 +635,6 @@ export default function WizardContainer() {
               </section>
             )}
 
-            {/* FOOTER CORPORATIVO */}
             <footer className="bg-slate-50 p-4 border-t-2 border-[#0A1F33] break-inside-avoid mt-auto">
               <div className="flex items-center justify-between">
                 <div className="max-w-[75%]">
@@ -623,7 +664,6 @@ export default function WizardContainer() {
   return (
     <div className={`min-h-screen font-inter ${step === 2 ? 'bg-[#F8FAFC]' : 'bg-white'}`}>
       
-      {/* HEADER WEB CORREGIDO */}
       <div className="max-w-[1600px] mx-auto p-10 flex justify-between items-center">
         <h1 className="text-3xl font-montserrat font-black text-[#0A1F33] uppercase">
           DATA<span className="font-light text-[#3A3A3C] tracking-normal">CAR</span>
@@ -635,7 +675,6 @@ export default function WizardContainer() {
         <div className="max-w-4xl mx-auto p-12 animate-in fade-in duration-700">
           <div className="bg-white border border-slate-100 p-6 md:p-12 shadow-2xl space-y-8 md:space-y-12">
             
-            {/* NUEVO: Switcher Visual */}
             <div className="flex bg-slate-100 p-1 rounded mb-4 shadow-inner">
               <button 
                 onClick={() => setSearchMode('scratch')} 
@@ -683,14 +722,38 @@ export default function WizardContainer() {
             {searchMode === 'scratch' ? (
               <>
                 <div className="space-y-10 animate-in fade-in">
-                  <div className="flex justify-between items-center">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
-                    <div className="flex gap-4 font-black text-[#0A1F33] text-sm tracking-tighter bg-slate-50 px-4 py-2 rounded-full">
-                      <span>${formData.presupuestoMin.toLocaleString()}</span> — <span>${formData.presupuestoMax.toLocaleString()}</span>
+                    
+                    {/* INYECCIÓN: Inputs Sincronizados de Presupuesto */}
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                      <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full md:w-auto">
+                        <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                        <input 
+                          type="number" 
+                          value={inputMin} 
+                          onChange={(e) => setInputMin(e.target.value)} 
+                          onBlur={handleInputMinBlur}
+                          onKeyDown={(e) => e.key === 'Enter' && handleInputMinBlur()}
+                          className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        />
+                      </div>
+                      <span className="text-slate-300 font-black">—</span>
+                      <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full md:w-auto">
+                        <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                        <input 
+                          type="number" 
+                          value={inputMax} 
+                          onChange={(e) => setInputMax(e.target.value)} 
+                          onBlur={handleInputMaxBlur}
+                          onKeyDown={(e) => e.key === 'Enter' && handleInputMaxBlur()}
+                          className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        />
+                      </div>
                     </div>
                   </div>
+
                   <div className="relative w-full h-1 bg-slate-100 rounded-full">
-                    {/* Matemáticas ajustadas para que el input arranque en 8000 en vez de 0 */}
                     <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
                     <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
                     <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
@@ -714,7 +777,6 @@ export default function WizardContainer() {
                 </div>
               </>
             ) : (
-              // NUEVO: Formulario para Modo Similitud
               <div className="space-y-12 animate-in fade-in">
                 <div className="space-y-4 relative z-40">
                   <label className="text-[9px] font-black uppercase text-slate-400">1. Seleccioná el Auto de Referencia (Ancla) *</label>
