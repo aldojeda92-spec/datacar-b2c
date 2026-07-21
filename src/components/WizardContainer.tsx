@@ -895,51 +895,60 @@ export default function WizardContainer() {
                       )}
 
                       {paymentMode === 'cash' && (
-                        <div className="animate-in fade-in slide-in-from-bottom-2">
-                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
-                            
-                            <div className="flex items-center gap-4 w-full md:w-auto">
-                              <div className="flex flex-col gap-1 w-full md:w-auto">
-                                <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Desde</span>
-                                <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
-                                  <span className="text-slate-400 font-black text-sm mr-1">$</span>
-                                  <input 
-                                    type="number" 
-                                    value={inputMin} 
-                                    onChange={(e) => setInputMin(e.target.value)} 
-                                    onBlur={handleInputMinBlur}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleInputMinBlur()}
-                                    className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                  />
-                                </div>
-                              </div>
 
-                              <span className="text-slate-300 font-black mt-4">—</span>
+  
+                        {/* === CÓDIGO CORREGIDO: CONTROLES DE PRESUPUESTO FLUIDOS Y ANTI-DESBORDAMIENTO === */}
+<div className="animate-in fade-in slide-in-from-bottom-2">
+  <div className="flex flex-col gap-4 w-full">
+    <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
+    
+    <div className="flex flex-row items-end justify-between gap-2 md:gap-4 w-full">
+      {/* Contenedor DESDE */}
+      <div className="flex flex-col gap-1 flex-1 min-w-0">
+        <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Desde</span>
+        <div className="flex items-center bg-slate-50 px-3 md:px-4 py-2.5 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full">
+          <span className="text-slate-400 font-black text-sm mr-1">$</span>
+          <input 
+            type="number" 
+            value={inputMin} 
+            onChange={(e) => setInputMin(e.target.value)} 
+            onBlur={handleInputMinBlur}
+            onKeyDown={(e) => e.key === 'Enter' && handleInputMinBlur()}
+            className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-full text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
+        </div>
+      </div>
 
-                              <div className="flex flex-col gap-1 w-full md:w-auto">
-                                <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Hasta</span>
-                                <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
-                                  <span className="text-slate-400 font-black text-sm mr-1">$</span>
-                                  <input 
-                                    type="number" 
-                                    value={inputMax} 
-                                    onChange={(e) => setInputMax(e.target.value)} 
-                                    onBlur={handleInputMaxBlur}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleInputMaxBlur()}
-                                    className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+      {/* Separador */}
+      <span className="text-slate-300 font-black pb-3 shrink-0">—</span>
 
-                          <div className="relative w-full h-1 bg-slate-100 rounded-full mt-10">
-                            <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
-                            <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
-                            <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
-                          </div>
-                        </div>
+      {/* Contenedor HASTA */}
+      <div className="flex flex-col gap-1 flex-1 min-w-0">
+        <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Hasta</span>
+        <div className="flex items-center bg-slate-50 px-3 md:px-4 py-2.5 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full">
+          <span className="text-slate-400 font-black text-sm mr-1">$</span>
+          <input 
+            type="number" 
+            value={inputMax} 
+            onChange={(e) => setInputMax(e.target.value)} 
+            onBlur={handleInputMaxBlur}
+            onKeyDown={(e) => e.key === 'Enter' && handleInputMaxBlur()}
+            className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-full text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {/* Rango Visual (Slider) */}
+  <div className="relative w-full h-1 bg-slate-100 rounded-full mt-10">
+    <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
+    <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+    <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+  </div>
+</div>
+
+                    
                       )}
                     </div>
 
