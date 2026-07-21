@@ -65,16 +65,25 @@ export const comparacionesB2b = pgTable('comparaciones_b2b', {
 // === INYECCIÓN PROBLEMA B: TABLA DE REDIRECCIONES WHATSAPP ===
 // Arquitectura corregida: Integridad referencial con borrado en cascada habilitado.
 // === INYECCIÓN PROBLEMA B: TABLA DE REDIRECCIONES WHATSAPP ===
+// Asegúrate de agregar 'varchar' a tus importaciones de drizzle-orm/pg-core arriba.
+// import { pgTable, text, integer, timestamp, jsonb, uuid, varchar } from 'drizzle-orm/pg-core';
+
+// === INYECCIÓN PROBLEMA B: TABLA DE REDIRECCIONES WHATSAPP ===
 export const leadRedirecciones = pgTable('lead_redirecciones', {
   id: uuid('id').primaryKey().defaultRandom(),
   
-  // ARQUITECTURA CRÍTICA: Debe ser uuid() explícitamente para que Neon DB no rechace el insert
+  // ARQUITECTURA: Neon exige UUID, no text.
   leadId: uuid('lead_id').notNull(), 
   
-  autoId: text('auto_id').notNull(),
-  marca: text('marca').notNull(),
-  modelo: text('modelo').notNull(),
-  concesionaria: text('concesionaria').notNull(),
-  telefonoDestino: text('telefono_destino').notNull(),
-  createdAt: timestamp('created_at').defaultNow(),
+  // ARQUITECTURA: Neon exige VARCHAR(255), no text.
+  autoId: varchar('auto_id', { length: 255 }).notNull(),
+  marca: varchar('marca', { length: 255 }).notNull(),
+  modelo: varchar('modelo', { length: 255 }).notNull(),
+  concesionaria: varchar('concesionaria', { length: 255 }).notNull(),
+  
+  // ARQUITECTURA: Neon exige VARCHAR(50).
+  telefonoDestino: varchar('telefono_destino', { length: 50 }).notNull(),
+  
+  // EL BUG ESTABA AQUÍ: Tu base de datos dice "creado_en", NO "created_at".
+  creadoEn: timestamp('creado_en').defaultNow(), 
 });
