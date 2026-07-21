@@ -4,77 +4,90 @@ import { db } from '@/lib/db';
 import { leads, comparacionesB2b, leadRedirecciones } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 
-export async function saveLeadAction(formData: any): Promise<{ success: boolean; leadId?: string }> {
+// === CONTRATO DE DATOS ESTRICTO (Reemplaza el "any" inseguro) ===
+interface LeadPayload {
+  id?: string;
+  nombre: string;
+  celular: string;
+  email?: string;
+  presupuestoMin: number;
+  presupuestoMax: number;
+  atributos: string[];
+  motorizacion: string[];
+  tipoVehiculo: string[];
+  origen: string[];
+  concesionaria: string[];
+  notas?: string;
+}
+
+export async function saveLeadAction(formData: LeadPayload): Promise<{ success: boolean; leadId?: string }> {
   try {
-    // REGLA 3: Si recibimos un ID desde el frontend (Paso 3), ACTUALIZAMOS al invitado actual.
+    // Sanitización básica para proteger Neon DB
+    const payload = {
+      nombre: formData.nombre || 'Invitado',
+      celular: formData.celular || '0999999999',
+      email: formData.email || null,
+      presupuestoMin: Number(formData.presupuestoMin) || 0,
+      presupuestoMax: Number(formData.presupuestoMax) || 0,
+      atributos: formData.atributos || [],
+      motorizacion: formData.motorizacion || [],
+      tipoVehiculo: formData.tipoVehiculo || [],
+      origen: formData.origen || [],
+      concesionariaPreferencia: formData.concesionaria || [],
+      notas: formData.notas || '',
+    };
+
+    // REGLA 3: Si recibimos un ID desde el frontend, ACTUALIZAMOS al invitado actual.
     if (formData.id) {
       const [updatedLead] = await db.update(leads)
-        .set({
-          nombre: formData.nombre,
-          celular: formData.celular,
-          email: formData.email || null,
-          presupuestoMin: formData.presupuestoMin,
-          presupuestoMax: formData.presupuestoMax,
-          atributos: formData.atributos,
-          motorizacion: formData.motorizacion,
-          tipoVehiculo: formData.tipoVehiculo,
-          origen: formData.origen,
-          concesionariaPreferencia: formData.concesionaria,
-          notas: formData.notas || '',
-        })
+        .set(payload)
         .where(eq(leads.id, formData.id))
-        .returning();
+        .returning({ id: leads.id }); // Optimización: Solo retornamos el ID, no toda la fila
 
-      // Si se actualizó con éxito, devolvemos el mismo ID para mantener la sesión
       if (updatedLead) {
         return { success: true, leadId: updatedLead.id };
       }
     }
 
-    // REGLA 1: Si no hay ID (Paso 1), CREAMOS SIEMPRE un Lead nuevo ("Invitado").
-    const [newLead] = await db.insert(leads).values({
-      nombre: formData.nombre,
-      celular: formData.celular,
-      email: formData.email || null,
-      presupuestoMin: formData.presupuestoMin,
-      presupuestoMax: formData.presupuestoMax,
-      atributos: formData.atributos,
-      motorizacion: formData.motorizacion,
-      tipoVehiculo: formData.tipoVehiculo,
-      origen: formData.origen,
-      concesionariaPreferencia: formData.concesionaria,
-      notas: formData.notas || '',
-    }).returning();
+    // REGLA 1: Si no hay ID o falló la actualización, CREAMOS un Lead nuevo.
+    const [newLead] = await db.insert(leads)
+      .values(payload)
+      .returning({ id: leads.id });
 
     return { success: true, leadId: newLead.id };
   } catch (error) {
-    console.error("Error al guardar lead:", error);
+    console.error("[Arquitectura] Error al guardar lead:", error);
     return { success: false };
   }
 }
 
-// REGLA 2: Esta función queda intacta, ya asocia correctamente los autos al ID que le pases.
+// REGLA 2: Motor de logging B2B. Saneado de casteos peligrosos ("as any").
 export async function logComparisonAction(data: {
   leadId: string, 
   vIds: string[], 
   nombres: string 
 }) {
   try {
+    // Validación defensiva: Evita crashes si el frontend envía arrays vacíos
+    if (!data.vIds || data.vIds.length < 2) {
+      console.warn("[Arquitectura] Log de comparación abortado: Vehículos insuficientes.");
+      return { success: false };
+    }
+
     await db.insert(comparacionesB2b).values({
       leadId: data.leadId,
-      vehiculo1Id: data.vIds[0] as any,
-      vehiculo2Id: data.vIds[1] as any,
-      vehiculo3Id: data.vIds[2] as any || null,
+      vehiculo1Id: data.vIds[0],
+      vehiculo2Id: data.vIds[1],
+      vehiculo3Id: data.vIds[2] || null, // Fallback seguro si solo comparan 2
       modelosComparados: data.nombres
     });
     return { success: true };
   } catch (error) {
-    console.error("Error B2B Log:", error);
+    console.error("[Arquitectura] Error en B2B Log:", error);
     return { success: false };
   }
 }
 
-// === INYECCIÓN PROBLEMA B: REGISTRO DE CLICS A WHATSAPP ===
 // === INYECCIÓN PROBLEMA B: REGISTRO DE CLICS A WHATSAPP ===
 export async function logWhatsAppRedirectAction(data: {
   leadId: string;
@@ -85,7 +98,7 @@ export async function logWhatsAppRedirectAction(data: {
   telefonoDestino: string;
 }) {
   try {
-    // Fail-Fast: Si el payload viene roto desde el cliente, ni siquiera tocamos la BD.
+    // Fail-Fast: Si el payload viene roto desde el cliente, protegemos la BD.
     if (!data.leadId || !data.autoId) {
       console.warn("[Arquitectura] Intento B2B bloqueado: Identificadores nulos.", data);
       return { success: false };
@@ -106,7 +119,7 @@ export async function logWhatsAppRedirectAction(data: {
     return { success: true };
     
   } catch (error) {
-    // Exponemos el error para evitar fallos silenciosos
+    // Exponemos el error para evitar fallos silenciosos en la consola de Vercel
     console.error("[Arquitectura] ERROR CRÍTICO B2B AL INSERTAR EN NEON DB:");
     console.error(error);
     return { success: false };
