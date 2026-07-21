@@ -895,16 +895,16 @@ export default function WizardContainer() {
                       )}
 
                       {paymentMode === 'cash' && (
-                        <div className="animate-in fade-in slide-in-from-bottom-2">
+                        <div className="animate-in fade-in slide-in-from-bottom-2 w-full">
                           <div className="flex flex-col gap-4 w-full">
                             <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
                             
-                            <div className="flex flex-row items-end justify-between gap-2 md:gap-4 w-full">
+                            <div className="flex flex-row items-center justify-between gap-2 w-full">
                               {/* Contenedor DESDE */}
                               <div className="flex flex-col gap-1 flex-1 min-w-0">
                                 <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Desde</span>
-                                <div className="flex items-center bg-slate-50 px-2 md:px-4 py-2.5 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full overflow-hidden">
-                                  <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                                <div className="flex items-center bg-slate-50 px-3 py-2.5 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full overflow-hidden">
+                                  <span className="text-slate-400 font-black text-sm mr-1 shrink-0">$</span>
                                   <input 
                                     type="number" 
                                     value={inputMin} 
@@ -917,13 +917,15 @@ export default function WizardContainer() {
                               </div>
 
                               {/* Separador */}
-                              <span className="text-slate-300 font-black pb-3 shrink-0 px-1">—</span>
+                              <div className="flex flex-col gap-1 shrink-0 pt-4">
+                                <span className="text-slate-300 font-black">—</span>
+                              </div>
 
                               {/* Contenedor HASTA */}
                               <div className="flex flex-col gap-1 flex-1 min-w-0">
                                 <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Hasta</span>
-                                <div className="flex items-center bg-slate-50 px-2 md:px-4 py-2.5 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full overflow-hidden">
-                                  <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                                <div className="flex items-center bg-slate-50 px-3 py-2.5 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full overflow-hidden">
+                                  <span className="text-slate-400 font-black text-sm mr-1 shrink-0">$</span>
                                   <input 
                                     type="number" 
                                     value={inputMax} 
