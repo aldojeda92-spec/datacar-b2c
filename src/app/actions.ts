@@ -1,5 +1,39 @@
 'use server';
 
+// INYECTAR EN: app/actions.ts
+
+// Asegúrate de tener importada tu nueva tabla del schema de Drizzle. Ej:
+// import { leads, comparacionesB2b, leadRedirecciones } from '@/lib/schema';
+
+export async function logWhatsAppRedirectAction(data: {
+  leadId: string;
+  autoId: string;
+  marca: string;
+  modelo: string;
+  concesionaria: string;
+  telefonoDestino: string;
+}) {
+  try {
+    await db.insert(leadRedirecciones).values({
+      leadId: data.leadId,
+      autoId: data.autoId,
+      marca: data.marca,
+      modelo: data.modelo,
+      concesionaria: data.concesionaria,
+      telefonoDestino: data.telefonoDestino,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Error B2B Redirect Log:", error);
+    // Aunque falle el log, permitimos el true para no bloquearle la compra al usuario, 
+    // pero idealmente deberías tener una alerta de monitoreo aquí.
+    return { success: false };
+  }
+}
+
+
+
+
 import { db } from '@/lib/db';
 import { leads, comparacionesB2b } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
