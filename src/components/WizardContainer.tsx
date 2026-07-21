@@ -15,7 +15,7 @@ const CONFIG_FINANCIERA = {
 const WPP_ROUTER: Record<string, string> = {
   "DEFAULT": "595991244469", // Número central de DATACAR
   "Garden": "595991244469",  // Mapear números reales en el futuro
-  "Automotor": "595991244469",
+  "Automotor": "595994889020",
   "Diesa": "595991244469",
   "Toyotoshi": "595991244469"
 };
