@@ -53,6 +53,11 @@ export default function WizardContainer() {
   const [activeVersions, setActiveVersions] = useState<Record<string, IAAuto>>({});
   const [esRescate, setEsRescate] = useState(false);
 
+  // === INYECCIÓN PROBLEMA A: ESTADOS FINANCIEROS ===
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'financed'>('cash');
+  const [financeParams, setFinanceParams] = useState({ delivery: 0, installment: 400, term: 60 });
+  // =================================================
+
   // === NUEVOS ESTADOS: Búsqueda por Similitud ===
   const [searchMode, setSearchMode] = useState<'scratch' | 'similar'>('scratch');
   const [anchorAuto, setAnchorAuto] = useState<IAAuto | null>(null);
@@ -83,6 +88,27 @@ export default function WizardContainer() {
     concesionaria: [] as string[], 
     notas: ''
   });
+
+  // === INYECCIÓN PROBLEMA A: LÓGICA DE INGENIERÍA INVERSA ===
+  const calculateFinanceRange = () => {
+    const r = 0.09 / 12; // Tasa 9% Anual
+    const n = financeParams.term;
+    const q = financeParams.installment;
+    const p_gross = q * ((1 - Math.pow(1 + r, -n)) / r);
+    const p_net = p_gross * 0.973; // Factor retención 2.7% (2.2% Admin + 0.5% Seguro)
+    const total = p_net + financeParams.delivery;
+    // Rango de tolerancia del 10%
+    return { min: total * 0.9, max: total * 1.1 };
+  };
+
+  const calculateEstimatedInstallment = (price: number) => {
+    const r = 0.09 / 12;
+    const n = financeParams.term;
+    const principal = (price - financeParams.delivery) / 0.973; // Gross-up
+    if (principal <= 0) return 0;
+    return principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  };
+  // ==========================================================
 
   const isCelularValid = formData.celular.startsWith('09') && formData.celular.length === 10;
   
@@ -184,6 +210,14 @@ export default function WizardContainer() {
       if (searchMode === 'similar' && anchorAuto) {
         dataToSave.notas = `[Búsqueda por Similitud] Ancla: ${anchorAuto.marca} ${anchorAuto.modelo}. ${formData.notas}`;
       }
+
+      // === INYECCIÓN PROBLEMA A: OVERRIDE DE PRESUPUESTO ===
+      if (searchMode === 'scratch' && paymentMode === 'financed') {
+        const range = calculateFinanceRange();
+        dataToSave.presupuestoMin = range.min;
+        dataToSave.presupuestoMax = range.max;
+      }
+      // =====================================================
 
       const result = await saveLeadAction(dataToSave);
       
@@ -327,8 +361,7 @@ export default function WizardContainer() {
   const displayedAutos = [...top3Promoted, ...remainingAutos];
   // ============================================================================
 
-  // === INYECCIÓN: Componente MultiSelect modificado para soportar descripciones (diccionario) ===
-  const MultiSelect = ({ label, items, value, storeKey, descriptions }: { label: string, items: string[], value: string[], storeKey: any, descriptions?: Record<string, string> }) => (
+  const MultiSelect = ({ label, items, value, storeKey }: { label: string, items: string[], value: string[], storeKey: any }) => (
     <div className="space-y-1 relative">
       <label className="text-[9px] font-black uppercase text-slate-400">{label}</label>
       <div 
@@ -343,21 +376,14 @@ export default function WizardContainer() {
       {openFilter === label && (
         <div className="absolute z-50 w-full bg-white border shadow-2xl max-h-60 overflow-y-auto p-2 animate-in fade-in zoom-in duration-200">
           {items.map(item => (
-            <label key={item} className="flex items-start gap-3 p-3 hover:bg-slate-50 cursor-pointer rounded transition-colors">
+            <label key={item} className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer rounded transition-colors">
               <input 
                 type="checkbox" 
                 checked={value.includes(item)} 
                 onChange={() => toggleArrayItem(storeKey, item)}
-                className="w-4 h-4 mt-0.5 accent-[#00BFFF] rounded border-slate-300"
+                className="w-4 h-4 accent-[#00BFFF] rounded border-slate-300"
               />
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-[#0A1F33] uppercase leading-none">{item}</span>
-                {descriptions && descriptions[item] && (
-                  <span className="text-[9px] font-medium text-slate-400 mt-1 leading-tight">
-                    {descriptions[item]}
-                  </span>
-                )}
-              </div>
+              <span className="text-xs font-bold text-[#0A1F33] uppercase">{item}</span>
             </label>
           ))}
         </div>
@@ -727,48 +753,88 @@ export default function WizardContainer() {
             {searchMode === 'scratch' ? (
               <>
                 <div className="space-y-10 animate-in fade-in">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
-                    
-                    <div className="flex items-center gap-4 w-full md:w-auto">
-                      <div className="flex flex-col gap-1 w-full md:w-auto">
-                        <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Desde</span>
-                        <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
-                          <span className="text-slate-400 font-black text-sm mr-1">$</span>
-                          <input 
-                            type="number" 
-                            value={inputMin} 
-                            onChange={(e) => setInputMin(e.target.value)} 
-                            onBlur={handleInputMinBlur}
-                            onKeyDown={(e) => e.key === 'Enter' && handleInputMinBlur()}
-                            className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                          />
-                        </div>
+                  
+                  {/* === INYECCIÓN PROBLEMA A: SELECTOR DE MODALIDAD DE PAGO === */}
+                  <div className="flex bg-slate-100 p-1 rounded mb-6 shadow-inner">
+                    <button 
+                      onClick={() => setPaymentMode('cash')} 
+                      className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest transition-all ${paymentMode === 'cash' ? 'bg-white shadow-sm text-[#0A1F33]' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Al Contado
+                    </button>
+                    <button 
+                      onClick={() => setPaymentMode('financed')} 
+                      className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest transition-all ${paymentMode === 'financed' ? 'bg-white shadow-sm text-[#0A1F33]' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Financiación (Cuotas)
+                    </button>
+                  </div>
+
+                  {/* === INYECCIÓN PROBLEMA A: INPUTS FINANCIEROS === */}
+                  {paymentMode === 'financed' && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-6 border-2 border-slate-100 mb-6 animate-in fade-in">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Entrega Inicial (USD)</label>
+                        <input type="number" value={financeParams.delivery} onChange={(e) => setFinanceParams({...financeParams, delivery: Number(e.target.value)})} className="w-full p-3 border-2 border-slate-100 bg-white outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" />
                       </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Cuota Mensual Deseada (USD)</label>
+                        <input type="number" value={financeParams.installment} onChange={(e) => setFinanceParams({...financeParams, installment: Number(e.target.value)})} className="w-full p-3 border-2 border-slate-100 bg-white outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Plazo</label>
+                        <select value={financeParams.term} onChange={(e) => setFinanceParams({...financeParams, term: Number(e.target.value)})} className="w-full p-3 border-2 border-slate-100 bg-white outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]">
+                          {[12, 24, 36, 48, 60].map(m => <option key={m} value={m}>{m} Meses</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                  {/* ========================================================== */}
 
-                      <span className="text-slate-300 font-black mt-4">—</span>
+                  <div className={`transition-all duration-300 ${paymentMode === 'financed' ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
+                      <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
+                      
+                      <div className="flex items-center gap-4 w-full md:w-auto">
+                        <div className="flex flex-col gap-1 w-full md:w-auto">
+                          <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Desde</span>
+                          <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
+                            <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                            <input 
+                              type="number" 
+                              value={inputMin} 
+                              onChange={(e) => setInputMin(e.target.value)} 
+                              onBlur={handleInputMinBlur}
+                              onKeyDown={(e) => e.key === 'Enter' && handleInputMinBlur()}
+                              className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                          </div>
+                        </div>
 
-                      <div className="flex flex-col gap-1 w-full md:w-auto">
-                        <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Hasta</span>
-                        <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
-                          <span className="text-slate-400 font-black text-sm mr-1">$</span>
-                          <input 
-                            type="number" 
-                            value={inputMax} 
-                            onChange={(e) => setInputMax(e.target.value)} 
-                            onBlur={handleInputMaxBlur}
-                            onKeyDown={(e) => e.key === 'Enter' && handleInputMaxBlur()}
-                            className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                          />
+                        <span className="text-slate-300 font-black mt-4">—</span>
+
+                        <div className="flex flex-col gap-1 w-full md:w-auto">
+                          <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Hasta</span>
+                          <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
+                            <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                            <input 
+                              type="number" 
+                              value={inputMax} 
+                              onChange={(e) => setInputMax(e.target.value)} 
+                              onBlur={handleInputMaxBlur}
+                              onKeyDown={(e) => e.key === 'Enter' && handleInputMaxBlur()}
+                              className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="relative w-full h-1 bg-slate-100 rounded-full">
-                    <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
-                    <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
-                    <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                    <div className="relative w-full h-1 bg-slate-100 rounded-full">
+                      <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
+                      <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                      <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                    </div>
                   </div>
                 </div>
 
@@ -782,20 +848,7 @@ export default function WizardContainer() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">
-                  {/* INYECCIÓN: MultiSelect de Motorización con Descripciones */}
-                  <MultiSelect 
-                    label="Motorización" 
-                    items={['Nafta', 'Flex', 'Diesel', 'MHEV', 'HEV', 'PHEV', 'EV', 'REEV']} 
-                    value={formData.motorizacion} 
-                    storeKey="motorizacion" 
-                    descriptions={{
-                      'MHEV': 'Híbrido Suave',
-                      'HEV': 'Híbrido Autorrecargable',
-                      'PHEV': 'Híbrido Enchufable',
-                      'EV': '100% Eléctrico',
-                      'REEV': 'Eléctrico Rango Extendido'
-                    }}
-                  />
+                  <MultiSelect label="Motorización" items={['PHEV', 'HEV', 'EV', 'Diesel', 'Flex', 'Nafta']} value={formData.motorizacion} storeKey="motorizacion" />
                   <MultiSelect label="Tipo de Vehículo" items={['SUV', 'Sedan', 'Hatchback', 'Pickup']} value={formData.tipoVehiculo} storeKey="tipoVehiculo" />
                   <MultiSelect label="Origen de Marca" items={['USA','Corea', 'Japón', 'Europa', 'China']} value={formData.origen} storeKey="origen" />
                   <MultiSelect label="Concesionaria" items={['Garden', 'Automotor', 'Santa Rosa', 'Chacomer', 'Toyotoshi', 'Condor', 'Gorostiaga', 'Automaq', 'De La Sobera', 'Vicar', 'Tape Ruvicha', 'Diesa']} value={formData.concesionaria} storeKey="concesionaria" />
@@ -891,7 +944,8 @@ export default function WizardContainer() {
                      : `Buscás un auto con ${formData.atributos.join(', ')}.`}
                  </h2>
                  <p className="mt-4 text-slate-400 font-medium text-sm uppercase tracking-widest underline decoration-[#00BFFF] underline-offset-8">
-                   Inversión: ${formData.presupuestoMin.toLocaleString()} – ${formData.presupuestoMax.toLocaleString()} | 
+                   {/* === INYECCIÓN PROBLEMA A: MOSTRAR RANGO CORRECTO EN HEADER DE RESULTADOS === */}
+                   {paymentMode === 'financed' ? 'Cuota Deseada' : 'Inversión'}: ${paymentMode === 'financed' ? financeParams.installment.toLocaleString() : formData.presupuestoMin.toLocaleString()} {paymentMode === 'financed' ? '/mes' : `– $${formData.presupuestoMax.toLocaleString()}`} | 
                    Origen: {formData.origen.length > 0 ? formData.origen.join(', ') : 'Todos'} | 
                    Motor: {formData.motorizacion.length > 0 ? formData.motorizacion.join(', ') : 'Cualquiera'}
                  </p>
@@ -965,6 +1019,12 @@ export default function WizardContainer() {
               const promoValida = getPromocionValida(currentAuto.subsegmento);
               const isVIP = top3Ids.has(auto.id);
 
+              // === INYECCIÓN PROBLEMA A: CALCULAR CUOTA EN TIEMPO DE RENDERIZADO ===
+              const estimatedInstallment = paymentMode === 'financed' && searchMode === 'scratch'
+                ? calculateEstimatedInstallment(currentAuto.precioUsd) 
+                : null;
+              // =====================================================================
+
               return (
                 <div key={auto.id} className={`flex flex-col transition-all relative overflow-hidden ${isVIP ? 'bg-gradient-to-b from-slate-100 to-white border-2 border-[#0A1F33] shadow-md' : 'bg-white border border-slate-100 shadow-sm'} ${compareIds.includes(auto.id) ? 'ring-4 ring-[#00BFFF]/20' : ''}`}>
                   
@@ -1025,7 +1085,16 @@ export default function WizardContainer() {
 
                     <div className="flex justify-between border-y py-4 text-sm font-black uppercase">
                       <span className="text-slate-400">{currentAuto.match_percent ? `${currentAuto.match_percent}% Match` : 'Extra'}</span>
-                      <span className="text-[#0A1F33]">${currentAuto.precioUsd?.toLocaleString()}</span>
+                      {/* === INYECCIÓN PROBLEMA A: MOSTRAR CUOTA EN VEZ DE PRECIO TOTAL SI ESTÁ FINANCIADO === */}
+                      {estimatedInstallment ? (
+                        <span className="text-[#0A1F33]">
+                          ${estimatedInstallment.toLocaleString(undefined, {maximumFractionDigits: 0})} 
+                          <span className="text-[8px] text-slate-400 ml-1">/MES</span>
+                        </span>
+                      ) : (
+                        <span className="text-[#0A1F33]">${currentAuto.precioUsd?.toLocaleString()}</span>
+                      )}
+                      {/* ====================================================================================== */}
                     </div>
                     
                     <button onClick={() => setExpandedId(expandedId === auto.id ? null : auto.id)} className="text-[9px] font-black text-[#0A1F33] text-left uppercase tracking-widest hover:text-[#00BFFF] transition-colors">+ Datos Técnicos</button>
@@ -1124,5 +1193,3 @@ export default function WizardContainer() {
     </div>
   );
 }
-
-
