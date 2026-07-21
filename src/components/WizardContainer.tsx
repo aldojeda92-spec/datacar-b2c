@@ -3,6 +3,23 @@
 import { useState, useRef, useEffect } from 'react';
 import { saveLeadAction, logComparisonAction } from '@/app/actions';
 
+
+import { saveLeadAction, logComparisonAction, logWhatsAppRedirectAction } from '@/app/actions';
+
+// === DICCIONARIO DE RUTEO WHATSAPP ===
+const WPP_ROUTER: Record<string, string> = {
+  "DEFAULT": "595991244469", // Número central de DATACAR
+  "Garden": "595991244469",  // En el futuro: "595..."
+  "Automotor": "595991244469",
+  "Diesa": "595991244469",
+  "Toyotoshi": "595991244469"
+};
+
+const getWppNumber = (concesionaria?: string) => {
+  if (!concesionaria || !WPP_ROUTER[concesionaria]) return WPP_ROUTER["DEFAULT"];
+  return WPP_ROUTER[concesionaria];
+};
+
 interface IAAuto {
   id: string; 
   puesto: number; 
