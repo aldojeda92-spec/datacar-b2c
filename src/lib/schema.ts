@@ -1,5 +1,6 @@
 import { pgTable, text, integer, timestamp, jsonb, uuid } from 'drizzle-orm/pg-core';
 
+// TABLA EN PRODUCCIÓN: Intacta según tu directiva (con advertencia de deuda técnica).
 export const leads = pgTable('leads', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
   nombre: text('nombre').notNull(),
@@ -17,6 +18,7 @@ export const leads = pgTable('leads', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// TABLA EN PRODUCCIÓN: Intacta.
 export const catalogoMatriz = pgTable('catalogo_matriz', {
   id: uuid('id').primaryKey().defaultRandom(),
   concesionaria: text('concesionaria'),
@@ -49,6 +51,7 @@ export const catalogoMatriz = pgTable('catalogo_matriz', {
   airbags: text('airbags'),
 });
 
+// TABLA EN PRODUCCIÓN: Intacta.
 export const comparacionesB2b = pgTable('comparaciones_b2b', {
   id: uuid('id').primaryKey().defaultRandom(),
   leadId: text('lead_id').references(() => leads.id),
@@ -60,10 +63,12 @@ export const comparacionesB2b = pgTable('comparaciones_b2b', {
 });
 
 // === INYECCIÓN PROBLEMA B: TABLA DE REDIRECCIONES WHATSAPP ===
-// Completamente aislada para no afectar el resto del sistema
+// Arquitectura corregida: Integridad referencial con borrado en cascada habilitado.
 export const leadRedirecciones = pgTable('lead_redirecciones', {
   id: uuid('id').primaryKey().defaultRandom(),
-  leadId: text('lead_id').notNull(), // Usamos text() para mantener compatibilidad con leads.id
+  leadId: text('lead_id')
+    .notNull()
+    .references(() => leads.id, { onDelete: 'cascade' }),
   autoId: text('auto_id').notNull(),
   marca: text('marca').notNull(),
   modelo: text('modelo').notNull(),
