@@ -53,17 +53,36 @@ export default function WizardContainer() {
   const [activeVersions, setActiveVersions] = useState<Record<string, IAAuto>>({});
   const [esRescate, setEsRescate] = useState(false);
 
-  // === INYECCIÓN PROBLEMA A: ESTADOS FINANCIEROS ===
-  const [paymentMode, setPaymentMode] = useState<'cash' | 'financed'>('cash');
-  const [financeParams, setFinanceParams] = useState({ delivery: 0, installment: 400, term: 60 });
-  // =================================================
-
   // === NUEVOS ESTADOS: Búsqueda por Similitud ===
   const [searchMode, setSearchMode] = useState<'scratch' | 'similar'>('scratch');
   const [anchorAuto, setAnchorAuto] = useState<IAAuto | null>(null);
   const [similarSearchTerm, setSimilarSearchTerm] = useState('');
   const [similarSearchResults, setSimilarSearchResults] = useState<IAAuto[]>([]);
   const [isSearchingSimilar, setIsSearchingSimilar] = useState(false);
+
+  // === INYECCIÓN PROBLEMA A: ESTADOS FINANCIEROS Y MATEMÁTICA ===
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'financed'>('cash');
+  const [financeParams, setFinanceParams] = useState({ delivery: 0, installment: 400, term: 60 });
+
+  // Cálculo inverso con Math.round para proteger el esquema de la Base de Datos
+  const calculateFinanceRange = () => {
+    const r = 0.09 / 12; // 9% Anual
+    const n = financeParams.term;
+    const q = financeParams.installment;
+    const p_gross = q * ((1 - Math.pow(1 + r, -n)) / r);
+    const p_net = p_gross * 0.973; // Gross-up menos 2.7%
+    const total = p_net + financeParams.delivery;
+    return { min: Math.round(total * 0.9), max: Math.round(total * 1.1) };
+  };
+
+  const calculateEstimatedInstallment = (price: number) => {
+    const r = 0.09 / 12;
+    const n = financeParams.term;
+    const principal = (price - financeParams.delivery) / 0.973; 
+    if (principal <= 0) return 0;
+    return principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  };
+  // ===============================================================
 
   // Estados del Buscador (Paso 2)
   const [searchTerm, setSearchTerm] = useState('');
@@ -89,27 +108,6 @@ export default function WizardContainer() {
     notas: ''
   });
 
-  // === INYECCIÓN PROBLEMA A: LÓGICA DE INGENIERÍA INVERSA ===
-  const calculateFinanceRange = () => {
-    const r = 0.09 / 12; // Tasa 9% Anual
-    const n = financeParams.term;
-    const q = financeParams.installment;
-    const p_gross = q * ((1 - Math.pow(1 + r, -n)) / r);
-    const p_net = p_gross * 0.973; // Factor retención 2.7% (2.2% Admin + 0.5% Seguro)
-    const total = p_net + financeParams.delivery;
-    // Rango de tolerancia del 10%
-    return { min: total * 0.9, max: total * 1.1 };
-  };
-
-  const calculateEstimatedInstallment = (price: number) => {
-    const r = 0.09 / 12;
-    const n = financeParams.term;
-    const principal = (price - financeParams.delivery) / 0.973; // Gross-up
-    if (principal <= 0) return 0;
-    return principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-  };
-  // ==========================================================
-
   const isCelularValid = formData.celular.startsWith('09') && formData.celular.length === 10;
   
   // === LÓGICA DE VALIDACIÓN CONDICIONAL ===
@@ -127,13 +125,11 @@ export default function WizardContainer() {
   const [inputMin, setInputMin] = useState(formData.presupuestoMin.toString());
   const [inputMax, setInputMax] = useState(formData.presupuestoMax.toString());
 
-  // Escucha cambios en la barra y actualiza las cajas de texto en vivo
   useEffect(() => {
     setInputMin(formData.presupuestoMin.toString());
     setInputMax(formData.presupuestoMax.toString());
   }, [formData.presupuestoMin, formData.presupuestoMax]);
 
-  // Validadores y "Empuje Automático" al perder el foco (onBlur)
   const handleInputMinBlur = () => {
     let val = Number(inputMin);
     if (isNaN(val)) val = 8000;
@@ -167,7 +163,6 @@ export default function WizardContainer() {
     }
     setFormData(prev => ({ ...prev, presupuestoMin: newMin, presupuestoMax: val }));
   };
-  // =========================================================
   
   const toggleArrayItem = (key: 'motorizacion' | 'tipoVehiculo' | 'origen' | 'concesionaria', value: string) => {
     setFormData(prev => {
@@ -211,13 +206,13 @@ export default function WizardContainer() {
         dataToSave.notas = `[Búsqueda por Similitud] Ancla: ${anchorAuto.marca} ${anchorAuto.modelo}. ${formData.notas}`;
       }
 
-      // === INYECCIÓN PROBLEMA A: OVERRIDE DE PRESUPUESTO ===
+      // === INYECCIÓN PROBLEMA A: INTERCEPCIÓN FINANCIERA PARA LA DB ===
       if (searchMode === 'scratch' && paymentMode === 'financed') {
         const range = calculateFinanceRange();
         dataToSave.presupuestoMin = range.min;
         dataToSave.presupuestoMax = range.max;
       }
-      // =====================================================
+      // ================================================================
 
       const result = await saveLeadAction(dataToSave);
       
@@ -286,7 +281,6 @@ export default function WizardContainer() {
     }
   };
 
-  // Buscador predictivo (Paso 2)
   useEffect(() => {
     if (searchTerm.trim().length < 2) {
       setSearchResults([]);
@@ -309,7 +303,6 @@ export default function WizardContainer() {
     return () => clearTimeout(delayFn);
   }, [searchTerm]);
 
-  // === NUEVO: Buscador predictivo (Paso 1) ===
   useEffect(() => {
     if (searchMode !== 'similar') return;
     if (similarSearchTerm.trim().length < 2) {
@@ -333,9 +326,6 @@ export default function WizardContainer() {
     return () => clearTimeout(delayFn);
   }, [similarSearchTerm, searchMode]);
 
-  // ============================================================================
-  // LOGICA CRO: FILTRO Y EXTRACCIÓN DE AD SLOTS (MÁXIMO 3)
-  // ============================================================================
   const getPromocionValida = (valor?: string) => {
     if (!valor) return null;
     const cleanValue = valor.trim().toLowerCase();
@@ -359,9 +349,8 @@ export default function WizardContainer() {
 
   const remainingAutos = uniqueAutos.filter(auto => !top3Ids.has(auto.id));
   const displayedAutos = [...top3Promoted, ...remainingAutos];
-  // ============================================================================
 
-  const MultiSelect = ({ label, items, value, storeKey }: { label: string, items: string[], value: string[], storeKey: any }) => (
+  const MultiSelect = ({ label, items, value, storeKey, descriptions }: { label: string, items: string[], value: string[], storeKey: any, descriptions?: Record<string, string> }) => (
     <div className="space-y-1 relative">
       <label className="text-[9px] font-black uppercase text-slate-400">{label}</label>
       <div 
@@ -376,14 +365,21 @@ export default function WizardContainer() {
       {openFilter === label && (
         <div className="absolute z-50 w-full bg-white border shadow-2xl max-h-60 overflow-y-auto p-2 animate-in fade-in zoom-in duration-200">
           {items.map(item => (
-            <label key={item} className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer rounded transition-colors">
+            <label key={item} className="flex items-start gap-3 p-3 hover:bg-slate-50 cursor-pointer rounded transition-colors">
               <input 
                 type="checkbox" 
                 checked={value.includes(item)} 
                 onChange={() => toggleArrayItem(storeKey, item)}
-                className="w-4 h-4 accent-[#00BFFF] rounded border-slate-300"
+                className="w-4 h-4 mt-0.5 accent-[#00BFFF] rounded border-slate-300"
               />
-              <span className="text-xs font-bold text-[#0A1F33] uppercase">{item}</span>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-[#0A1F33] uppercase leading-none">{item}</span>
+                {descriptions && descriptions[item] && (
+                  <span className="text-[9px] font-medium text-slate-400 mt-1 leading-tight">
+                    {descriptions[item]}
+                  </span>
+                )}
+              </div>
             </label>
           ))}
         </div>
@@ -405,49 +401,24 @@ export default function WizardContainer() {
 
     return (
       <div className="font-inter">
-        
-        {/* MODAL DE LEAD MAGNET */}
         {showLeadModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0A1F33]/90 p-4 animate-in fade-in duration-300 print:hidden">
             <div className="bg-white max-w-md w-full p-8 shadow-2xl relative">
               <button onClick={() => setShowLeadModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-[#0A1F33]">✕</button>
-              
               <div className="text-center mb-6">
-                <h3 className="font-montserrat font-black text-xl text-[#0A1F33] uppercase leading-tight mb-2">
-                  Desbloquea tu <span className="text-[#00BFFF]">Dossier VIP</span>
-                </h3>
+                <h3 className="font-montserrat font-black text-xl text-[#0A1F33] uppercase leading-tight mb-2">Desbloquea tu <span className="text-[#00BFFF]">Dossier VIP</span></h3>
                 <p className="text-xs text-slate-500 font-medium">Ingresa tus datos para generar el PDF con tu nombre y recibir asesoría personalizada sobre estos modelos.</p>
               </div>
-
               <div className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-[9px] font-black uppercase text-slate-400">Nombre Completo</label>
-                  <input 
-                    value={formData.nombre === 'Invitado' ? '' : formData.nombre} 
-                    onChange={e => setFormData({...formData, nombre: e.target.value})} 
-                    className="w-full p-3 border-2 border-slate-100 bg-slate-50 outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" 
-                    placeholder="Ej: Juan Pérez"
-                  />
+                  <input value={formData.nombre === 'Invitado' ? '' : formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full p-3 border-2 border-slate-100 bg-slate-50 outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" placeholder="Ej: Juan Pérez" />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-black uppercase text-slate-400">WhatsApp (Para enviar el PDF)</label>
-                  <input 
-                    type="tel"
-                    value={formData.celular === '0999999999' ? '' : formData.celular} 
-                    onChange={e => {
-                      const soloNumeros = e.target.value.replace(/\D/g, '').slice(0, 10);
-                      setFormData({...formData, celular: soloNumeros});
-                    }} 
-                    className="w-full p-3 border-2 border-slate-100 bg-slate-50 outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" 
-                    placeholder="09..."
-                  />
+                  <input type="tel" value={formData.celular === '0999999999' ? '' : formData.celular} onChange={e => { const soloNumeros = e.target.value.replace(/\D/g, '').slice(0, 10); setFormData({...formData, celular: soloNumeros}); }} className="w-full p-3 border-2 border-slate-100 bg-slate-50 outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" placeholder="09..." />
                 </div>
-                
-                <button 
-                  disabled={formData.nombre.length < 2 || !isCelularValid || isSavingLead}
-                  onClick={handleUnlockDossier} 
-                  className="w-full mt-4 py-4 bg-[#0A1F33] text-white font-black text-[10px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all disabled:opacity-30 flex items-center justify-center gap-2"
-                >
+                <button disabled={formData.nombre.length < 2 || !isCelularValid || isSavingLead} onClick={handleUnlockDossier} className="w-full mt-4 py-4 bg-[#0A1F33] text-white font-black text-[10px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all disabled:opacity-30 flex items-center justify-center gap-2">
                   {isSavingLead ? 'Generando...' : 'Generar PDF Corporativo'}
                 </button>
               </div>
@@ -455,45 +426,30 @@ export default function WizardContainer() {
           </div>
         )}
 
-        {/* === VISTA INTERACTIVA WEB === */}
         <div className="min-h-screen bg-white p-2 md:p-6 animate-in fade-in duration-500 print:hidden">
           <div className="max-w-7xl mx-auto space-y-4">
-            
             <div className="flex flex-row justify-between items-center gap-4 border-b-2 border-[#0A1F33] pb-2">
-              <h2 className="text-xl md:text-2xl font-montserrat font-black text-[#0A1F33] uppercase leading-none">
-                Comparativa <span className="text-[#00BFFF]">Datos Duros</span>
-              </h2>
+              <h2 className="text-xl md:text-2xl font-montserrat font-black text-[#0A1F33] uppercase leading-none">Comparativa <span className="text-[#00BFFF]">Datos Duros</span></h2>
               <div className="flex gap-2">
-                <button 
-                  onClick={handlePrintRequest} 
-                  className="bg-slate-100 text-[#0A1F33] border border-slate-200 px-4 py-2 font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                  Guardar PDF
+                <button onClick={handlePrintRequest} className="bg-slate-100 text-[#0A1F33] border border-slate-200 px-4 py-2 font-black text-[9px] uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg> Guardar PDF
                 </button>
-                <button onClick={() => setShowComparison(false)} className="bg-[#0A1F33] text-white px-4 py-2 font-black text-[9px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all">
-                  ← Volver
-                </button>
+                <button onClick={() => setShowComparison(false)} className="bg-[#0A1F33] text-white px-4 py-2 font-black text-[9px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all">← Volver</button>
               </div>
             </div>
             
             <div className="w-full overflow-auto max-h-[85vh] border-b-2 border-slate-200 shadow-inner rounded-lg relative">
               <div className="min-w-[900px]">
                 <div className="grid grid-cols-4 gap-1 sticky top-0 z-50 bg-white shadow-md border-b-2 border-slate-200">
-                  <div className="bg-slate-50 p-2 flex flex-col justify-end font-black text-[9px] text-slate-400 uppercase tracking-widest">
-                    Especificaciones
-                  </div>
+                  <div className="bg-slate-50 p-2 flex flex-col justify-end font-black text-[9px] text-slate-400 uppercase tracking-widest">Especificaciones</div>
                   {selected.map(auto => {
                      const currentAuto = activeVersions[auto.id] || auto;
                      const promoValida = getPromocionValida(currentAuto.subsegmento);
-
                      return (
                       <div key={auto.id} className="p-2 text-center space-y-1.5 bg-white border-x flex flex-col justify-between relative">
                         {promoValida && (
                           <div className="absolute top-2 left-0 right-0 z-10 flex justify-center">
-                            <span className="bg-[#00BFFF] text-[#0A1F33] font-black text-[8px] uppercase px-2 py-0.5 rounded shadow-sm">
-                              {promoValida}
-                            </span>
+                            <span className="bg-[#00BFFF] text-[#0A1F33] font-black text-[8px] uppercase px-2 py-0.5 rounded shadow-sm">{promoValida}</span>
                           </div>
                         )}
                         <div className="h-12 flex items-center justify-center mt-2"> 
@@ -503,9 +459,7 @@ export default function WizardContainer() {
                           <h3 className="font-black text-[#0A1F33] uppercase text-[10px]">{currentAuto.marca} {currentAuto.modelo}</h3>
                           <p className="text-[#00BFFF] font-black text-xs">${currentAuto.precioUsd.toLocaleString()}</p>
                         </div>
-                        <a href={`https://wa.me/595991244469?text=Me interesa el ${currentAuto.marca} ${currentAuto.modelo} del comparador Datacar.`} target="_blank" className="block w-full py-1 bg-[#0A1F33] text-white text-center font-black text-[8px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all">
-                          Quiero Comprar
-                        </a>
+                        <a href={`https://wa.me/595991244469?text=Me interesa el ${currentAuto.marca} ${currentAuto.modelo} del comparador Datacar.`} target="_blank" className="block w-full py-1 bg-[#0A1F33] text-white text-center font-black text-[8px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all">Quiero Comprar</a>
                       </div>
                      );
                   })}
@@ -542,13 +496,10 @@ export default function WizardContainer() {
                         valor = currentAuto.despejeSuelo ? `${currentAuto.despejeSuelo} mm` : null;
                       }
                       const linkWhatsApp = `https://wa.me/595991244469?text=Hola, quiero consultar el dato de *${item.label}* para el vehículo *${currentAuto.marca} ${currentAuto.modelo}* que vi en Datacar.`;
-
                       return (
                         <div key={auto.id} className="p-3 text-center text-[10px] font-bold text-[#0A1F33] flex items-center justify-center border-x">
                           {valor && valor !== '–' && String(valor).trim() !== '' ? valor : (
-                            <a href={linkWhatsApp} target="_blank" rel="noopener noreferrer" className="text-[8px] px-2 py-1.5 bg-[#0A1F33] text-white rounded font-black uppercase tracking-widest hover:bg-[#00BFFF] transition-colors">
-                              Consultar Dato
-                            </a>
+                            <a href={linkWhatsApp} target="_blank" rel="noopener noreferrer" className="text-[8px] px-2 py-1.5 bg-[#0A1F33] text-white rounded font-black uppercase tracking-widest hover:bg-[#00BFFF] transition-colors">Consultar Dato</a>
                           )}
                         </div>
                       );
@@ -560,21 +511,15 @@ export default function WizardContainer() {
           </div>
         </div>
 
-        {/* === VISTA DEL DOSSIER PDF === */}
         {autoRecomendado && (
           <div className="hidden print:block w-full bg-white px-8 py-4 font-inter text-slate-800">
-            
             <header className="border-b-2 border-[#0A1F33] pb-4 mb-6 flex justify-between items-end">
               <div>
-                <h1 className="text-3xl font-montserrat font-black uppercase tracking-tighter text-[#0A1F33]">
-                  DATA<span className="font-light text-[#3A3A3C] tracking-normal">CAR</span>
-                </h1>
+                <h1 className="text-3xl font-montserrat font-black uppercase tracking-tighter text-[#0A1F33]">DATA<span className="font-light text-[#3A3A3C] tracking-normal">CAR</span></h1>
                 <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mt-1">Consultoría Automotriz · Paraguay</p>
               </div>
               <div className="text-right">
-                <h2 className="text-lg font-montserrat font-black uppercase text-[#0A1F33]">
-                  {searchMode === 'similar' ? 'Análisis de Alternativas' : 'Dossier Estratégico'}
-                </h2>
+                <h2 className="text-lg font-montserrat font-black uppercase text-[#0A1F33]">{searchMode === 'similar' ? 'Análisis de Alternativas' : 'Dossier Estratégico'}</h2>
                 {searchMode === 'similar' && anchorAuto ? (
                   <p className="text-[10px] font-bold text-[#00BFFF] mt-1">Frente a: {anchorAuto.marca} {anchorAuto.modelo}</p>
                 ) : (
@@ -595,9 +540,7 @@ export default function WizardContainer() {
                   <h4 className="text-xl font-montserrat font-black uppercase leading-none mb-1 text-[#0A1F33]">
                     {autoRecomendado.marca} {autoRecomendado.modelo} <span className="font-medium text-slate-500 text-sm">{autoRecomendado.version}</span>
                   </h4>
-                  <p className="text-[10px] text-[#3A3A3C] font-medium leading-relaxed italic pr-4">
-                    "{autoRecomendado.veredicto || "Análisis a Demanda: Vehículo seleccionado para contrastar métricas técnicas frente a las opciones del mercado."}"
-                  </p>
+                  <p className="text-[10px] text-[#3A3A3C] font-medium leading-relaxed italic pr-4">"{autoRecomendado.veredicto || "Análisis a Demanda: Vehículo seleccionado para contrastar métricas técnicas frente a las opciones del mercado."}"</p>
                 </div>
                 <div className="w-24 h-24 bg-white border border-slate-200 flex items-center justify-center p-1 flex-shrink-0">
                   <img src={autoRecomendado.urlImagen} alt={autoRecomendado.modelo} className="max-w-full max-h-full object-contain" />
@@ -611,21 +554,14 @@ export default function WizardContainer() {
                 <thead>
                   <tr className="bg-slate-100 text-[8px] uppercase tracking-widest text-slate-500">
                     <th className="p-2 font-black border border-slate-200 w-1/4">Especificación</th>
-                    {selected.map(auto => (
-                      <th key={auto.id} className="p-2 font-black border border-slate-200 text-center text-[#0A1F33]">{auto.marca} {auto.modelo}</th>
-                    ))}
+                    {selected.map(auto => (<th key={auto.id} className="p-2 font-black border border-slate-200 text-center text-[#0A1F33]">{auto.marca} {auto.modelo}</th>))}
                   </tr>
                 </thead>
                 <tbody className="font-medium text-[9px] text-[#3A3A3C]">
                   {[
-                    { label: 'Precio USD', key: 'precioUsd', isPrice: true },
-                    { label: 'Versión', key: 'version' },
-                    { label: 'Motor', key: 'motor' },
-                    { label: 'Consumo/Eficiencia', key: 'combustible' },
-                    { label: 'Baulera', key: 'bauleraLitros' },
-                    { label: 'Garantía', key: 'garantia' },
-                    { label: 'Seguridad (ADAS)', key: 'adas' },
-                    { label: 'Origen Marca', key: 'origenMarca' },
+                    { label: 'Precio USD', key: 'precioUsd', isPrice: true }, { label: 'Versión', key: 'version' }, { label: 'Motor', key: 'motor' },
+                    { label: 'Consumo/Eficiencia', key: 'combustible' }, { label: 'Baulera', key: 'bauleraLitros' }, { label: 'Garantía', key: 'garantia' },
+                    { label: 'Seguridad (ADAS)', key: 'adas' }, { label: 'Origen Marca', key: 'origenMarca' },
                   ].map((item, idx) => (
                     <tr key={idx} className="border-b border-slate-200 break-inside-avoid">
                       <td className="p-1.5 bg-slate-50 font-black text-[8px] uppercase text-slate-500 border border-slate-200">{item.label}</td>
@@ -634,12 +570,7 @@ export default function WizardContainer() {
                         let valor = (currentAuto as any)[item.key];
                         if (item.key === 'bauleraLitros' && valor) valor = `${valor} Litros`;
                         if (item.isPrice && valor) valor = `$${valor.toLocaleString()}`;
-                        
-                        return (
-                          <td key={auto.id} className={`p-1.5 border border-slate-200 text-center ${item.isPrice ? 'font-black text-[#0A1F33] text-[10px]' : ''}`}>
-                            {valor || 'Consultar'}
-                          </td>
-                        );
+                        return (<td key={auto.id} className={`p-1.5 border border-slate-200 text-center ${item.isPrice ? 'font-black text-[#0A1F33] text-[10px]' : ''}`}>{valor || 'Consultar'}</td>);
                       })}
                     </tr>
                   ))}
@@ -657,7 +588,6 @@ export default function WizardContainer() {
                       <div className="flex-1">
                         <h4 className="font-black text-[10px] uppercase text-[#0A1F33] leading-none">{auto.marca} <span className="font-medium text-[9px] text-slate-500">{auto.modelo}</span></h4>
                         <p className="text-[9px] font-black text-[#0A1F33] mt-0.5 mb-1">${auto.precioUsd?.toLocaleString()}</p>
-                        
                         <div className="flex flex-wrap gap-1">
                           {auto.motor && <span className="px-1 py-0.5 bg-slate-100 text-[6px] font-bold text-slate-500 uppercase rounded-sm">{auto.motor.slice(0, 15)}</span>}
                           {auto.bauleraLitros && <span className="px-1 py-0.5 bg-slate-100 text-[6px] font-bold text-slate-500 uppercase rounded-sm">{auto.bauleraLitros}L</span>}
@@ -672,12 +602,8 @@ export default function WizardContainer() {
             <footer className="bg-slate-50 p-4 border-t-2 border-[#0A1F33] break-inside-avoid mt-auto">
               <div className="flex items-center justify-between">
                 <div className="max-w-[75%]">
-                  <h3 className="text-sm font-montserrat font-black uppercase text-[#0A1F33] mb-1">
-                    ☕ ¿Tomamos un café y lo definimos?
-                  </h3>
-                  <p className="text-[9px] text-[#3A3A3C] font-medium leading-tight pr-4">
-                    Un asesor experto de DATACAR te invita a revisar este reporte y evaluar la mejor estrategia financiera para tu inversión. Es gratis y sin compromiso.
-                  </p>
+                  <h3 className="text-sm font-montserrat font-black uppercase text-[#0A1F33] mb-1">☕ ¿Tomamos un café y lo definimos?</h3>
+                  <p className="text-[9px] text-[#3A3A3C] font-medium leading-tight pr-4">Un asesor experto de DATACAR te invita a revisar este reporte y evaluar la mejor estrategia financiera para tu inversión. Es gratis y sin compromiso.</p>
                 </div>
                 <div className="text-right border-l-2 border-slate-200 pl-4">
                   <p className="text-[7px] font-black uppercase tracking-widest text-slate-400 mb-1">Contacto Directo</p>
@@ -754,88 +680,94 @@ export default function WizardContainer() {
               <>
                 <div className="space-y-10 animate-in fade-in">
                   
-                  {/* === INYECCIÓN PROBLEMA A: SELECTOR DE MODALIDAD DE PAGO === */}
-                  <div className="flex bg-slate-100 p-1 rounded mb-6 shadow-inner">
-                    <button 
-                      onClick={() => setPaymentMode('cash')} 
-                      className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest transition-all ${paymentMode === 'cash' ? 'bg-white shadow-sm text-[#0A1F33]' : 'text-slate-400 hover:text-slate-600'}`}
-                    >
-                      Al Contado
-                    </button>
-                    <button 
-                      onClick={() => setPaymentMode('financed')} 
-                      className={`flex-1 py-3 text-[10px] md:text-xs font-black uppercase tracking-widest transition-all ${paymentMode === 'financed' ? 'bg-white shadow-sm text-[#0A1F33]' : 'text-slate-400 hover:text-slate-600'}`}
-                    >
-                      Financiación (Cuotas)
-                    </button>
+                  {/* === INYECCIÓN PROBLEMA A: TOGGLE VISUAL MODO PAGO === */}
+                  <div className="flex flex-col items-center md:items-start gap-3 border-b-2 border-slate-100 pb-6 mb-6">
+                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Método de Adquisición</span>
+                    <div className="inline-flex bg-slate-50 p-1 rounded border border-slate-200 shadow-sm">
+                      <button
+                        onClick={() => setPaymentMode('cash')}
+                        className={`px-8 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-sm ${paymentMode === 'cash' ? 'bg-[#0A1F33] shadow-md text-[#00BFFF]' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        💵 Pago al Contado
+                      </button>
+                      <button
+                        onClick={() => setPaymentMode('financed')}
+                        className={`px-8 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded-sm ${paymentMode === 'financed' ? 'bg-[#0A1F33] shadow-md text-[#00BFFF]' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        🏦 Financiación (Cuotas)
+                      </button>
+                    </div>
                   </div>
 
-                  {/* === INYECCIÓN PROBLEMA A: INPUTS FINANCIEROS === */}
+                  {/* === INYECCIÓN PROBLEMA A: INPUTS FINANCIEROS Y RENDERIZADO CONDICIONAL === */}
                   {paymentMode === 'financed' && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-6 border-2 border-slate-100 mb-6 animate-in fade-in">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-6 border-2 border-slate-100 animate-in fade-in slide-in-from-bottom-2 rounded">
                       <div className="space-y-1">
                         <label className="text-[9px] font-black uppercase text-slate-400">Entrega Inicial (USD)</label>
-                        <input type="number" value={financeParams.delivery} onChange={(e) => setFinanceParams({...financeParams, delivery: Number(e.target.value)})} className="w-full p-3 border-2 border-slate-100 bg-white outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" />
+                        <input type="number" value={financeParams.delivery} onChange={(e) => setFinanceParams({...financeParams, delivery: Number(e.target.value)})} className="w-full p-3 border-2 border-slate-100 bg-white outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33] rounded-sm" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black uppercase text-slate-400">Cuota Mensual Deseada (USD)</label>
-                        <input type="number" value={financeParams.installment} onChange={(e) => setFinanceParams({...financeParams, installment: Number(e.target.value)})} className="w-full p-3 border-2 border-slate-100 bg-white outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" />
+                        <label className="text-[9px] font-black uppercase text-slate-400">Cuota Objetivo (USD)</label>
+                        <input type="number" value={financeParams.installment} onChange={(e) => setFinanceParams({...financeParams, installment: Number(e.target.value)})} className="w-full p-3 border-2 border-slate-100 bg-white outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33] rounded-sm" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-black uppercase text-slate-400">Plazo</label>
-                        <select value={financeParams.term} onChange={(e) => setFinanceParams({...financeParams, term: Number(e.target.value)})} className="w-full p-3 border-2 border-slate-100 bg-white outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Plazo Financiero</label>
+                        <select value={financeParams.term} onChange={(e) => setFinanceParams({...financeParams, term: Number(e.target.value)})} className="w-full p-3 border-2 border-slate-100 bg-white outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33] rounded-sm appearance-none">
                           {[12, 24, 36, 48, 60].map(m => <option key={m} value={m}>{m} Meses</option>)}
                         </select>
                       </div>
                     </div>
                   )}
-                  {/* ========================================================== */}
 
-                  <div className={`transition-all duration-300 ${paymentMode === 'financed' ? 'opacity-40 pointer-events-none' : ''}`}>
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
-                      <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
-                      
-                      <div className="flex items-center gap-4 w-full md:w-auto">
-                        <div className="flex flex-col gap-1 w-full md:w-auto">
-                          <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Desde</span>
-                          <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
-                            <span className="text-slate-400 font-black text-sm mr-1">$</span>
-                            <input 
-                              type="number" 
-                              value={inputMin} 
-                              onChange={(e) => setInputMin(e.target.value)} 
-                              onBlur={handleInputMinBlur}
-                              onKeyDown={(e) => e.key === 'Enter' && handleInputMinBlur()}
-                              className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            />
+                  {/* === INYECCIÓN PROBLEMA A: ELIMINACIÓN DEL SLIDER DEL DOM === */}
+                  {paymentMode === 'cash' && (
+                    <div className="animate-in fade-in slide-in-from-bottom-2">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
+                        
+                        <div className="flex items-center gap-4 w-full md:w-auto">
+                          <div className="flex flex-col gap-1 w-full md:w-auto">
+                            <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Desde</span>
+                            <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
+                              <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                              <input 
+                                type="number" 
+                                value={inputMin} 
+                                onChange={(e) => setInputMin(e.target.value)} 
+                                onBlur={handleInputMinBlur}
+                                onKeyDown={(e) => e.key === 'Enter' && handleInputMinBlur()}
+                                className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              />
+                            </div>
                           </div>
-                        </div>
 
-                        <span className="text-slate-300 font-black mt-4">—</span>
+                          <span className="text-slate-300 font-black mt-4">—</span>
 
-                        <div className="flex flex-col gap-1 w-full md:w-auto">
-                          <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Hasta</span>
-                          <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
-                            <span className="text-slate-400 font-black text-sm mr-1">$</span>
-                            <input 
-                              type="number" 
-                              value={inputMax} 
-                              onChange={(e) => setInputMax(e.target.value)} 
-                              onBlur={handleInputMaxBlur}
-                              onKeyDown={(e) => e.key === 'Enter' && handleInputMaxBlur()}
-                              className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            />
+                          <div className="flex flex-col gap-1 w-full md:w-auto">
+                            <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Hasta</span>
+                            <div className="flex items-center bg-slate-50 px-4 py-2 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors">
+                              <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                              <input 
+                                type="number" 
+                                value={inputMax} 
+                                onChange={(e) => setInputMax(e.target.value)} 
+                                onBlur={handleInputMaxBlur}
+                                onKeyDown={(e) => e.key === 'Enter' && handleInputMaxBlur()}
+                                className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-20 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="relative w-full h-1 bg-slate-100 rounded-full">
-                      <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
-                      <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
-                      <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                      <div className="relative w-full h-1 bg-slate-100 rounded-full mt-10">
+                        <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
+                        <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                        <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  {/* ========================================================================= */}
                 </div>
 
                 <div className="space-y-4 animate-in fade-in">
@@ -848,7 +780,19 @@ export default function WizardContainer() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">
-                  <MultiSelect label="Motorización" items={['PHEV', 'HEV', 'EV', 'Diesel', 'Flex', 'Nafta']} value={formData.motorizacion} storeKey="motorizacion" />
+                  <MultiSelect 
+                    label="Motorización" 
+                    items={['Nafta', 'Flex', 'Diesel', 'MHEV', 'HEV', 'PHEV', 'EV', 'REEV']} 
+                    value={formData.motorizacion} 
+                    storeKey="motorizacion" 
+                    descriptions={{
+                      'MHEV': 'Híbrido Suave',
+                      'HEV': 'Híbrido Autorrecargable',
+                      'PHEV': 'Híbrido Enchufable',
+                      'EV': '100% Eléctrico',
+                      'REEV': 'Eléctrico Rango Extendido'
+                    }}
+                  />
                   <MultiSelect label="Tipo de Vehículo" items={['SUV', 'Sedan', 'Hatchback', 'Pickup']} value={formData.tipoVehiculo} storeKey="tipoVehiculo" />
                   <MultiSelect label="Origen de Marca" items={['USA','Corea', 'Japón', 'Europa', 'China']} value={formData.origen} storeKey="origen" />
                   <MultiSelect label="Concesionaria" items={['Garden', 'Automotor', 'Santa Rosa', 'Chacomer', 'Toyotoshi', 'Condor', 'Gorostiaga', 'Automaq', 'De La Sobera', 'Vicar', 'Tape Ruvicha', 'Diesa']} value={formData.concesionaria} storeKey="concesionaria" />
@@ -944,10 +888,11 @@ export default function WizardContainer() {
                      : `Buscás un auto con ${formData.atributos.join(', ')}.`}
                  </h2>
                  <p className="mt-4 text-slate-400 font-medium text-sm uppercase tracking-widest underline decoration-[#00BFFF] underline-offset-8">
-                   {/* === INYECCIÓN PROBLEMA A: MOSTRAR RANGO CORRECTO EN HEADER DE RESULTADOS === */}
+                   {/* === INYECCIÓN PROBLEMA A: HEADER RESULTADOS === */}
                    {paymentMode === 'financed' ? 'Cuota Deseada' : 'Inversión'}: ${paymentMode === 'financed' ? financeParams.installment.toLocaleString() : formData.presupuestoMin.toLocaleString()} {paymentMode === 'financed' ? '/mes' : `– $${formData.presupuestoMax.toLocaleString()}`} | 
                    Origen: {formData.origen.length > 0 ? formData.origen.join(', ') : 'Todos'} | 
                    Motor: {formData.motorizacion.length > 0 ? formData.motorizacion.join(', ') : 'Cualquiera'}
+                   {/* ============================================== */}
                  </p>
                </>
             )}
@@ -1019,11 +964,11 @@ export default function WizardContainer() {
               const promoValida = getPromocionValida(currentAuto.subsegmento);
               const isVIP = top3Ids.has(auto.id);
 
-              // === INYECCIÓN PROBLEMA A: CALCULAR CUOTA EN TIEMPO DE RENDERIZADO ===
+              // === INYECCIÓN PROBLEMA A: CALCULAR CUOTA EN TIEMPO REAL ===
               const estimatedInstallment = paymentMode === 'financed' && searchMode === 'scratch'
                 ? calculateEstimatedInstallment(currentAuto.precioUsd) 
                 : null;
-              // =====================================================================
+              // ===========================================================
 
               return (
                 <div key={auto.id} className={`flex flex-col transition-all relative overflow-hidden ${isVIP ? 'bg-gradient-to-b from-slate-100 to-white border-2 border-[#0A1F33] shadow-md' : 'bg-white border border-slate-100 shadow-sm'} ${compareIds.includes(auto.id) ? 'ring-4 ring-[#00BFFF]/20' : ''}`}>
@@ -1085,16 +1030,16 @@ export default function WizardContainer() {
 
                     <div className="flex justify-between border-y py-4 text-sm font-black uppercase">
                       <span className="text-slate-400">{currentAuto.match_percent ? `${currentAuto.match_percent}% Match` : 'Extra'}</span>
-                      {/* === INYECCIÓN PROBLEMA A: MOSTRAR CUOTA EN VEZ DE PRECIO TOTAL SI ESTÁ FINANCIADO === */}
+                      {/* === INYECCIÓN PROBLEMA A: CUOTA VS PRECIO EN LA UI === */}
                       {estimatedInstallment ? (
                         <span className="text-[#0A1F33]">
-                          ${estimatedInstallment.toLocaleString(undefined, {maximumFractionDigits: 0})} 
+                          ${Math.round(estimatedInstallment).toLocaleString()} 
                           <span className="text-[8px] text-slate-400 ml-1">/MES</span>
                         </span>
                       ) : (
                         <span className="text-[#0A1F33]">${currentAuto.precioUsd?.toLocaleString()}</span>
                       )}
-                      {/* ====================================================================================== */}
+                      {/* ======================================================== */}
                     </div>
                     
                     <button onClick={() => setExpandedId(expandedId === auto.id ? null : auto.id)} className="text-[9px] font-black text-[#0A1F33] text-left uppercase tracking-widest hover:text-[#00BFFF] transition-colors">+ Datos Técnicos</button>
