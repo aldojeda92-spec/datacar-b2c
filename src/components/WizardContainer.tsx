@@ -858,22 +858,22 @@ export default function WizardContainer() {
                   <>
                     <div className="space-y-10 animate-in fade-in">
                       
-<div className="flex justify-center mb-8 border-b-2 border-slate-50 pb-8 w-full">
-  <div className="bg-slate-100 p-1 md:p-1.5 rounded-full flex w-full md:inline-flex md:w-auto shadow-inner">
-    <button
-      onClick={() => setPaymentMode('cash')}
-      className={`flex-1 md:flex-none px-2 md:px-8 py-3 md:py-2.5 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-full transition-all whitespace-nowrap ${paymentMode === 'cash' ? 'bg-[#0A1F33] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
-    >
-      💵 Contado
-    </button>
-    <button
-      onClick={() => setPaymentMode('financed')}
-      className={`flex-1 md:flex-none px-2 md:px-8 py-3 md:py-2.5 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-full transition-all whitespace-nowrap ${paymentMode === 'financed' ? 'bg-[#0A1F33] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
-    >
-      🏦 Financiación
-    </button>
-  </div>
-</div>
+                      <div className="flex justify-center mb-8 border-b-2 border-slate-50 pb-8 w-full">
+                        <div className="bg-slate-100 p-1 md:p-1.5 rounded-full flex w-full md:inline-flex md:w-auto shadow-inner">
+                          <button
+                            onClick={() => setPaymentMode('cash')}
+                            className={`flex-1 md:flex-none px-2 md:px-8 py-3 md:py-2.5 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-full transition-all whitespace-nowrap ${paymentMode === 'cash' ? 'bg-[#0A1F33] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                          >
+                            💵 Contado
+                          </button>
+                          <button
+                            onClick={() => setPaymentMode('financed')}
+                            className={`flex-1 md:flex-none px-2 md:px-8 py-3 md:py-2.5 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-full transition-all whitespace-nowrap ${paymentMode === 'financed' ? 'bg-[#0A1F33] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                          >
+                            🏦 Financiación
+                          </button>
+                        </div>
+                      </div>
 
                       {paymentMode === 'financed' && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-6 border-2 border-slate-100 animate-in fade-in slide-in-from-bottom-2 rounded">
@@ -895,60 +895,55 @@ export default function WizardContainer() {
                       )}
 
                       {paymentMode === 'cash' && (
+                        <div className="animate-in fade-in slide-in-from-bottom-2">
+                          <div className="flex flex-col gap-4 w-full">
+                            <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
+                            
+                            <div className="flex flex-row items-end justify-between gap-2 md:gap-4 w-full">
+                              {/* Contenedor DESDE */}
+                              <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Desde</span>
+                                <div className="flex items-center bg-slate-50 px-2 md:px-4 py-2.5 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full overflow-hidden">
+                                  <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                                  <input 
+                                    type="number" 
+                                    value={inputMin} 
+                                    onChange={(e) => setInputMin(e.target.value)} 
+                                    onBlur={handleInputMinBlur}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleInputMinBlur()}
+                                    className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-full min-w-0 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                  />
+                                </div>
+                              </div>
 
-  
-                        {/* === CÓDIGO CORREGIDO: CONTROLES DE PRESUPUESTO FLUIDOS Y ANTI-DESBORDAMIENTO === */}
-<div className="animate-in fade-in slide-in-from-bottom-2">
-  <div className="flex flex-col gap-4 w-full">
-    <label className="text-[9px] font-black uppercase text-slate-400">Presupuesto (USD)</label>
-    
-    <div className="flex flex-row items-end justify-between gap-2 md:gap-4 w-full">
-      {/* Contenedor DESDE */}
-      <div className="flex flex-col gap-1 flex-1 min-w-0">
-        <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Desde</span>
-        <div className="flex items-center bg-slate-50 px-3 md:px-4 py-2.5 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full">
-          <span className="text-slate-400 font-black text-sm mr-1">$</span>
-          <input 
-            type="number" 
-            value={inputMin} 
-            onChange={(e) => setInputMin(e.target.value)} 
-            onBlur={handleInputMinBlur}
-            onKeyDown={(e) => e.key === 'Enter' && handleInputMinBlur()}
-            className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-full text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          />
-        </div>
-      </div>
+                              {/* Separador */}
+                              <span className="text-slate-300 font-black pb-3 shrink-0 px-1">—</span>
 
-      {/* Separador */}
-      <span className="text-slate-300 font-black pb-3 shrink-0">—</span>
+                              {/* Contenedor HASTA */}
+                              <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Hasta</span>
+                                <div className="flex items-center bg-slate-50 px-2 md:px-4 py-2.5 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full overflow-hidden">
+                                  <span className="text-slate-400 font-black text-sm mr-1">$</span>
+                                  <input 
+                                    type="number" 
+                                    value={inputMax} 
+                                    onChange={(e) => setInputMax(e.target.value)} 
+                                    onBlur={handleInputMaxBlur}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleInputMaxBlur()}
+                                    className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-full min-w-0 text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
 
-      {/* Contenedor HASTA */}
-      <div className="flex flex-col gap-1 flex-1 min-w-0">
-        <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Hasta</span>
-        <div className="flex items-center bg-slate-50 px-3 md:px-4 py-2.5 rounded-full border border-slate-200 focus-within:border-[#00BFFF] transition-colors w-full">
-          <span className="text-slate-400 font-black text-sm mr-1">$</span>
-          <input 
-            type="number" 
-            value={inputMax} 
-            onChange={(e) => setInputMax(e.target.value)} 
-            onBlur={handleInputMaxBlur}
-            onKeyDown={(e) => e.key === 'Enter' && handleInputMaxBlur()}
-            className="bg-transparent outline-none text-[#0A1F33] font-black text-sm w-full text-center appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          />
-        </div>
-      </div>
-    </div>
-  </div>
-
-  {/* Rango Visual (Slider) */}
-  <div className="relative w-full h-1 bg-slate-100 rounded-full mt-10">
-    <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
-    <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
-    <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
-  </div>
-</div>
-
-                    
+                          {/* Rango Visual (Slider) */}
+                          <div className="relative w-full h-1 bg-slate-100 rounded-full mt-10">
+                            <div className="absolute h-full bg-[#00BFFF] rounded-full" style={{ left: `${((formData.presupuestoMin - 8000) / 192000) * 100}%`, right: `${100 - (((formData.presupuestoMax - 8000) / 192000) * 100)}%` }} />
+                            <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMin} onChange={handleMinChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#0A1F33] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                            <input type="range" min="8000" max="200000" step="1000" value={formData.presupuestoMax} onChange={handleMaxChange} className="absolute w-full -top-1 h-2 appearance-none bg-transparent pointer-events-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#00BFFF] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white" />
+                          </div>
+                        </div>
                       )}
                     </div>
 
@@ -1242,14 +1237,12 @@ export default function WizardContainer() {
                           </div>
                         )}
                         
-                        {/* === INYECCIÓN PROBLEMA B: REEMPLAZO DEL <a> POR EL BOTÓN INTERCEPTOR === */}
                         <button 
                           onClick={(e) => handleComprarClick(currentAuto, e)} 
                           className="mt-auto block w-full py-4 bg-[#0A1F33] text-white text-center font-black text-[10px] uppercase tracking-widest hover:bg-[#00BFFF] transition-colors shadow-lg"
                         >
                           Quiero Comprar
                         </button>
-                        {/* ======================================================================== */}
                       </div>
                     </div>
                   );
