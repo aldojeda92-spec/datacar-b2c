@@ -858,22 +858,22 @@ export default function WizardContainer() {
                   <>
                     <div className="space-y-10 animate-in fade-in">
                       
-                      <div className="flex justify-center mb-8 border-b-2 border-slate-50 pb-8">
-                        <div className="bg-slate-100 p-1.5 rounded-full inline-flex shadow-inner">
-                          <button
-                            onClick={() => setPaymentMode('cash')}
-                            className={`px-8 py-2.5 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-full transition-all ${paymentMode === 'cash' ? 'bg-[#0A1F33] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
-                          >
-                            💵 Pago al Contado
-                          </button>
-                          <button
-                            onClick={() => setPaymentMode('financed')}
-                            className={`px-8 py-2.5 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-full transition-all ${paymentMode === 'financed' ? 'bg-[#0A1F33] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
-                          >
-                            🏦 Financiación
-                          </button>
-                        </div>
-                      </div>
+<div className="flex justify-center mb-8 border-b-2 border-slate-50 pb-8 w-full">
+  <div className="bg-slate-100 p-1 md:p-1.5 rounded-full flex w-full md:inline-flex md:w-auto shadow-inner">
+    <button
+      onClick={() => setPaymentMode('cash')}
+      className={`flex-1 md:flex-none px-2 md:px-8 py-3 md:py-2.5 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-full transition-all whitespace-nowrap ${paymentMode === 'cash' ? 'bg-[#0A1F33] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+    >
+      💵 Contado
+    </button>
+    <button
+      onClick={() => setPaymentMode('financed')}
+      className={`flex-1 md:flex-none px-2 md:px-8 py-3 md:py-2.5 text-[10px] md:text-xs font-black uppercase tracking-widest rounded-full transition-all whitespace-nowrap ${paymentMode === 'financed' ? 'bg-[#0A1F33] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+    >
+      🏦 Financiación
+    </button>
+  </div>
+</div>
 
                       {paymentMode === 'financed' && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 p-6 border-2 border-slate-100 animate-in fade-in slide-in-from-bottom-2 rounded">
