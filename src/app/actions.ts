@@ -1,7 +1,6 @@
 'use server';
 
 import { db } from '@/lib/db';
-// Inyectamos la nueva tabla aquí:
 import { leads, comparacionesB2b, leadRedirecciones } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 
@@ -85,6 +84,12 @@ export async function logWhatsAppRedirectAction(data: {
   telefonoDestino: string;
 }) {
   try {
+    // Validación Defensiva (Fail-fast): Evita consultas nulas a la BD
+    if (!data.leadId || !data.autoId || !data.telefonoDestino) {
+      console.warn("Intento de redirección B2B bloqueado: Faltan datos críticos en el payload.");
+      return { success: false };
+    }
+
     await db.insert(leadRedirecciones).values({
       leadId: data.leadId,
       autoId: data.autoId,
@@ -95,7 +100,7 @@ export async function logWhatsAppRedirectAction(data: {
     });
     return { success: true };
   } catch (error) {
-    console.error("Error registrando redirección de WhatsApp:", error);
+    console.error("Error registrando redirección de WhatsApp en Neon DB:", error);
     return { success: false };
   }
 }
