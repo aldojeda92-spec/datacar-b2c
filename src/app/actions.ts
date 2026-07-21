@@ -75,6 +75,7 @@ export async function logComparisonAction(data: {
 }
 
 // === INYECCIÓN PROBLEMA B: REGISTRO DE CLICS A WHATSAPP ===
+// === INYECCIÓN PROBLEMA B: REGISTRO DE CLICS A WHATSAPP ===
 export async function logWhatsAppRedirectAction(data: {
   leadId: string;
   autoId: string;
@@ -84,12 +85,14 @@ export async function logWhatsAppRedirectAction(data: {
   telefonoDestino: string;
 }) {
   try {
-    // Validación Defensiva (Fail-fast): Evita consultas nulas a la BD
-    if (!data.leadId || !data.autoId || !data.telefonoDestino) {
-      console.warn("Intento de redirección B2B bloqueado: Faltan datos críticos en el payload.");
+    // Fail-Fast: Si el payload viene roto desde el cliente, ni siquiera tocamos la BD.
+    if (!data.leadId || !data.autoId) {
+      console.warn("[Arquitectura] Intento B2B bloqueado: Identificadores nulos.", data);
       return { success: false };
     }
-console.log("Intentando guardar lead B2B en Neon DB:", data);
+
+    console.log(`[Arquitectura] Guardando Lead B2B: ${data.leadId} -> ${data.marca} ${data.modelo}`);
+
     await db.insert(leadRedirecciones).values({
       leadId: data.leadId,
       autoId: data.autoId,
@@ -98,9 +101,14 @@ console.log("Intentando guardar lead B2B en Neon DB:", data);
       concesionaria: data.concesionaria,
       telefonoDestino: data.telefonoDestino,
     });
+    
+    console.log("[Arquitectura] ÉXITO: Lead guardado en Neon DB.");
     return { success: true };
+    
   } catch (error) {
-    console.error("Error registrando redirección de WhatsApp en Neon DB:", error);
+    // Exponemos el error para evitar fallos silenciosos
+    console.error("[Arquitectura] ERROR CRÍTICO B2B AL INSERTAR EN NEON DB:");
+    console.error(error);
     return { success: false };
   }
 }
