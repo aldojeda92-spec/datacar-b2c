@@ -499,53 +499,7 @@ export default function WizardContainer() {
     return (
       <div className="font-inter">
         
-        {showLeadModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0A1F33]/90 p-4 animate-in fade-in duration-300 print:hidden">
-            <div className="bg-white max-w-md w-full p-8 shadow-2xl relative">
-              <button onClick={() => { setShowLeadModal(false); setPendingRedirectAuto(null); }} className="absolute top-4 right-4 text-slate-400 hover:text-[#0A1F33]">✕</button>
-              
-              <div className="text-center mb-6">
-                <h3 className="font-montserrat font-black text-xl text-[#0A1F33] uppercase leading-tight mb-2">
-                  Desbloquea tu <span className="text-[#00BFFF]">Dossier VIP</span>
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">Ingresa tus datos para generar el PDF o contactar al vendedor.</p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase text-slate-400">Nombre Completo</label>
-                  <input 
-                    value={formData.nombre === 'Invitado' ? '' : formData.nombre} 
-                    onChange={e => setFormData({...formData, nombre: e.target.value})} 
-                    className="w-full p-3 border-2 border-slate-100 bg-slate-50 outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" 
-                    placeholder="Ej: Juan Pérez"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase text-slate-400">WhatsApp (Para enviar el PDF o Contactar)</label>
-                  <input 
-                    type="tel"
-                    value={formData.celular === '0999999999' ? '' : formData.celular} 
-                    onChange={e => {
-                      const soloNumeros = e.target.value.replace(/\D/g, '').slice(0, 10);
-                      setFormData({...formData, celular: soloNumeros});
-                    }} 
-                    className="w-full p-3 border-2 border-slate-100 bg-slate-50 outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" 
-                    placeholder="09..."
-                  />
-                </div>
-                
-                <button 
-                  disabled={formData.nombre.length < 2 || !isCelularValid || isSavingLead}
-                  onClick={handleUnlockDossier} 
-                  className="w-full mt-4 py-4 bg-[#0A1F33] text-white font-black text-[10px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all disabled:opacity-30 flex items-center justify-center gap-2"
-                >
-                  {isSavingLead ? 'Generando...' : (pendingRedirectAuto ? 'Contactar Vendedor' : 'Generar PDF Corporativo')}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        
 
         <div className="min-h-screen bg-white p-2 md:p-6 animate-in fade-in duration-500 print:hidden">
           <div className="max-w-7xl mx-auto space-y-4">
@@ -792,7 +746,53 @@ export default function WizardContainer() {
 
   return (
     <div className={`min-h-screen font-inter ${step === 2 ? 'bg-[#F8FAFC]' : 'bg-white'}`}>
-      
+      {showLeadModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0A1F33]/90 p-4 animate-in fade-in duration-300 print:hidden">
+            <div className="bg-white max-w-md w-full p-8 shadow-2xl relative">
+              <button onClick={() => { setShowLeadModal(false); setPendingRedirectAuto(null); }} className="absolute top-4 right-4 text-slate-400 hover:text-[#0A1F33]">✕</button>
+              
+              <div className="text-center mb-6">
+                <h3 className="font-montserrat font-black text-xl text-[#0A1F33] uppercase leading-tight mb-2">
+                  Desbloquea tu <span className="text-[#00BFFF]">Dossier VIP</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">Ingresa tus datos para generar el PDF o contactar al vendedor.</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400">Nombre Completo</label>
+                  <input 
+                    value={formData.nombre === 'Invitado' ? '' : formData.nombre} 
+                    onChange={e => setFormData({...formData, nombre: e.target.value})} 
+                    className="w-full p-3 border-2 border-slate-100 bg-slate-50 outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" 
+                    placeholder="Ej: Juan Pérez"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black uppercase text-slate-400">WhatsApp (Para enviar el PDF o Contactar)</label>
+                  <input 
+                    type="tel"
+                    value={formData.celular === '0999999999' ? '' : formData.celular} 
+                    onChange={e => {
+                      const soloNumeros = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setFormData({...formData, celular: soloNumeros});
+                    }} 
+                    className="w-full p-3 border-2 border-slate-100 bg-slate-50 outline-none focus:border-[#00BFFF] text-sm font-bold text-[#0A1F33]" 
+                    placeholder="09..."
+                  />
+                </div>
+                
+                <button 
+                  disabled={formData.nombre.length < 2 || !isCelularValid || isSavingLead}
+                  onClick={handleUnlockDossier} 
+                  className="w-full mt-4 py-4 bg-[#0A1F33] text-white font-black text-[10px] uppercase tracking-widest hover:bg-[#00BFFF] transition-all disabled:opacity-30 flex items-center justify-center gap-2"
+                >
+                  {isSavingLead ? 'Generando...' : (pendingRedirectAuto ? 'Contactar Vendedor' : 'Generar PDF Corporativo')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       <div className="max-w-[1600px] mx-auto p-10 flex justify-between items-center">
         <h1 className="text-3xl font-montserrat font-black text-[#0A1F33] uppercase">
           DATA<span className="font-light text-[#3A3A3C] tracking-normal">CAR</span>
