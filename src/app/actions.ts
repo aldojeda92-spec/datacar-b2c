@@ -89,7 +89,7 @@ export async function logWhatsAppRedirectAction(data: {
       console.warn("Intento de redirección B2B bloqueado: Faltan datos críticos en el payload.");
       return { success: false };
     }
-
+console.log("Intentando guardar lead B2B en Neon DB:", data);
     await db.insert(leadRedirecciones).values({
       leadId: data.leadId,
       autoId: data.autoId,
