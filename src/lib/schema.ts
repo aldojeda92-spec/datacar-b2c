@@ -64,11 +64,13 @@ export const comparacionesB2b = pgTable('comparaciones_b2b', {
 
 // === INYECCIÓN PROBLEMA B: TABLA DE REDIRECCIONES WHATSAPP ===
 // Arquitectura corregida: Integridad referencial con borrado en cascada habilitado.
+// === INYECCIÓN PROBLEMA B: TABLA DE REDIRECCIONES WHATSAPP ===
 export const leadRedirecciones = pgTable('lead_redirecciones', {
   id: uuid('id').primaryKey().defaultRandom(),
-  leadId: text('lead_id')
-    .notNull()
-    .references(() => leads.id, { onDelete: 'cascade' }),
+  
+  // ARQUITECTURA CRÍTICA: Debe ser uuid() explícitamente para que Neon DB no rechace el insert
+  leadId: uuid('lead_id').notNull(), 
+  
   autoId: text('auto_id').notNull(),
   marca: text('marca').notNull(),
   modelo: text('modelo').notNull(),
